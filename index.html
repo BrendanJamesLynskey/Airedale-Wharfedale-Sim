@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a0a">
+<title>Airedale Line — Class 333 Driver Simulator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Roboto+Mono:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;width:100%;overflow:hidden;background:#000;color:#e8eef5;font-family:'Share Tech Mono',monospace;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
+canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
+
+#menu{position:fixed;inset:0;z-index:100;background:linear-gradient(160deg,#08121e 0%,#0a1a2a 50%,#050a14 100%);display:flex;flex-direction:column;align-items:center;justify-content:safe center;overflow-y:auto;padding:1.5rem 1rem;}
+#menu h1{font-family:'Orbitron',sans-serif;font-size:clamp(1.8rem,5vw,3.2rem);font-weight:900;color:#5cc8ff;text-shadow:0 0 24px rgba(92,200,255,0.45),0 0 60px rgba(92,200,255,0.18);letter-spacing:0.18em;margin-bottom:0.2em;text-align:center;}
+#menu .sub{font-size:clamp(0.7rem,1.6vw,0.9rem);color:rgba(180,210,235,0.55);letter-spacing:0.45em;text-transform:uppercase;margin-bottom:1.6rem;text-align:center;}
+#menu .panel{background:rgba(14,28,46,0.7);border:1px solid rgba(92,200,255,0.18);padding:1.4rem 1.6rem;max-width:760px;width:100%;backdrop-filter:blur(8px);}
+#menu .panel h2{font-family:'Orbitron',sans-serif;font-size:0.95rem;font-weight:700;color:#9ccfff;letter-spacing:0.25em;margin-bottom:0.9rem;text-transform:uppercase;}
+#menu .stations{font-family:'Roboto Mono',monospace;font-size:0.78rem;color:#cfe6f7;line-height:1.7;margin-bottom:1.2rem;}
+#menu .stations .row{display:flex;justify-content:space-between;border-bottom:1px dashed rgba(92,200,255,0.1);padding:2px 0;}
+#menu .stations .row .km{color:rgba(180,210,235,0.5);}
+#menu .keys{font-size:0.72rem;color:rgba(180,210,235,0.6);line-height:2.1;margin-bottom:1.1rem;}
+#menu .keys b{display:inline-block;border:1px solid rgba(92,200,255,0.3);padding:0.08em 0.45em;margin:0 0.18em;font-family:'Orbitron',sans-serif;font-size:0.62rem;color:#9ccfff;font-weight:600;background:rgba(92,200,255,0.05);}
+#menu button{background:linear-gradient(180deg,rgba(92,200,255,0.18),rgba(92,200,255,0.06));border:1px solid rgba(92,200,255,0.5);color:#cfe6f7;font-family:'Orbitron',sans-serif;font-size:0.85rem;padding:0.85rem 2.2rem;cursor:pointer;letter-spacing:0.3em;font-weight:700;transition:all 0.2s;width:100%;max-width:300px;display:block;margin:0 auto;}
+#menu button:hover,#menu button:active{background:linear-gradient(180deg,rgba(92,200,255,0.32),rgba(92,200,255,0.12));box-shadow:0 0 30px rgba(92,200,255,0.25);color:#fff;}
+#menu .credits{margin-top:1.4rem;font-size:0.62rem;color:rgba(180,210,235,0.35);text-align:center;line-height:1.7;letter-spacing:0.05em;}
+#menu .credits a{color:rgba(180,210,235,0.55);text-decoration:none;}
+
+#hud{position:fixed;inset:0;pointer-events:none;z-index:30;display:none;font-family:'Roboto Mono',monospace;}
+#topbar{position:absolute;top:0;left:0;right:0;background:linear-gradient(180deg,rgba(0,0,0,0.65),rgba(0,0,0,0));padding:0.5rem 0.8rem;display:flex;justify-content:space-between;font-size:0.78rem;color:#cfe6f7;pointer-events:none;}
+#topbar .nx{color:#9ccfff;font-weight:700;letter-spacing:0.1em;}
+#topbar .clk{color:#fff;font-family:'Orbitron',sans-serif;letter-spacing:0.15em;}
+#topbar .scr{color:#ffe28a;}
+#msg{position:absolute;top:42%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);border:1px solid rgba(92,200,255,0.4);color:#cfe6f7;padding:0.8rem 1.4rem;font-family:'Orbitron',sans-serif;font-size:0.85rem;letter-spacing:0.18em;text-transform:uppercase;text-align:center;display:none;pointer-events:none;text-shadow:0 0 12px rgba(92,200,255,0.4);}
+#msg.warn{border-color:#ffaa00;color:#ffd57a;text-shadow:0 0 12px rgba(255,170,0,0.4);}
+#msg.bad{border-color:#ff4444;color:#ff8a8a;text-shadow:0 0 12px rgba(255,68,68,0.5);}
+
+/* Touch controls */
+#touch{position:fixed;inset:0;z-index:40;pointer-events:none;display:none;}
+#touch .pad{position:absolute;background:rgba(8,16,28,0.55);border:1px solid rgba(92,200,255,0.35);border-radius:14px;color:#cfe6f7;font-family:'Orbitron',sans-serif;font-size:0.7rem;letter-spacing:0.18em;display:flex;align-items:center;justify-content:center;pointer-events:auto;backdrop-filter:blur(4px);user-select:none;-webkit-user-select:none;text-align:center;line-height:1.2;}
+#touch .pad:active{background:rgba(92,200,255,0.25);border-color:#9ccfff;color:#fff;}
+#touch .pad.act{background:rgba(255,170,0,0.25);border-color:#ffaa00;color:#fff;}
+#tp-pwr-up{left:6vw;bottom:24vh;width:14vw;max-width:90px;height:9vh;max-height:64px;}
+#tp-pwr-dn{left:6vw;bottom:13vh;width:14vw;max-width:90px;height:9vh;max-height:64px;}
+#tp-brk-up{right:6vw;bottom:24vh;width:14vw;max-width:90px;height:9vh;max-height:64px;}
+#tp-brk-dn{right:6vw;bottom:13vh;width:14vw;max-width:90px;height:9vh;max-height:64px;}
+#tp-horn{left:50%;transform:translateX(-50%);bottom:1.5vh;width:18vw;max-width:130px;height:8vh;max-height:54px;}
+#tp-aws{right:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(255,170,0,0.18);}
+#tp-pause{left:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;}
+
+/* Pause overlay */
+#pause{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.78);display:none;flex-direction:column;align-items:center;justify-content:center;color:#cfe6f7;font-family:'Orbitron',sans-serif;}
+#pause h2{font-size:1.8rem;letter-spacing:0.35em;margin-bottom:1.2rem;color:#9ccfff;}
+#pause button{background:transparent;border:1px solid rgba(92,200,255,0.5);color:#cfe6f7;font-family:'Orbitron',sans-serif;font-size:0.8rem;padding:0.7rem 2rem;margin:0.4rem;cursor:pointer;letter-spacing:0.25em;}
+#pause button:hover{background:rgba(92,200,255,0.15);}
+
+#loading{position:fixed;inset:0;background:#050a14;color:#9ccfff;display:flex;align-items:center;justify-content:center;z-index:200;font-family:'Orbitron',sans-serif;letter-spacing:0.4em;font-size:0.85rem;}
+
+@media (orientation:portrait) and (max-width:900px){
+  #menu .stations{font-size:0.7rem;}
+}
+@media (max-width:520px){
+  #topbar{font-size:0.66rem;padding:0.35rem 0.5rem;}
+}
+</style>
+</head>
+<body>
+
+<div id="loading">LOADING — AIREDALE LINE</div>
+
+<div id="menu" style="display:none;">
+  <h1>AIREDALE LINE</h1>
+  <div class="sub">Class 333 — Driver Simulator</div>
+  <div class="panel">
+    <h2>Service 2L42 — Leeds → Skipton</h2>
+    <div class="stations" id="stationList"></div>
+    <h2>Cab Controls</h2>
+    <div class="keys">
+      <b>↑</b>/<b>W</b> Power up &nbsp; <b>↓</b>/<b>S</b> Power down &nbsp; <b>←</b>/<b>A</b> Brake increase &nbsp; <b>→</b>/<b>D</b> Brake decrease<br>
+      <b>SPACE</b> Emergency brake &nbsp; <b>H</b> Horn (high) &nbsp; <b>J</b> Horn (low) &nbsp; <b>Q</b> AWS reset &nbsp; <b>E</b> DSD reset<br>
+      <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
+    </div>
+    <button id="startBtn">START SERVICE</button>
+    <div class="credits">
+      Open-source railway data via OpenStreetMap (ODbL). Procedural audio synthesised in-browser.<br>
+      Built by <a href="https://github.com/BrendanJamesLynskey">Brendan Lynskey</a> &middot; <a href="https://github.com/BrendanJamesLynskey/Airedale-Wharfedale-Sim">source</a>
+    </div>
+  </div>
+</div>
+
+<canvas id="gc"></canvas>
+
+<div id="hud">
+  <div id="topbar">
+    <div><span class="nx" id="hudNext">NEXT: —</span></div>
+    <div class="clk" id="hudClk">00:00</div>
+    <div class="scr" id="hudScr">SCORE: 0</div>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<div id="touch">
+  <div class="pad" id="tp-pause">‖ PAUSE</div>
+  <div class="pad" id="tp-aws">AWS</div>
+  <div class="pad" id="tp-pwr-up">PWR ▲</div>
+  <div class="pad" id="tp-pwr-dn">PWR ▼</div>
+  <div class="pad" id="tp-brk-up">BRK ▲</div>
+  <div class="pad" id="tp-brk-dn">BRK ▼</div>
+  <div class="pad" id="tp-horn">HORN</div>
+</div>
+
+<div id="pause">
+  <h2>PAUSED</h2>
+  <button id="resumeBtn">RESUME</button>
+  <button id="quitBtn">QUIT TO MENU</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+// CONSTANTS — Airedale Line route (Leeds → Skipton)
+// Distances along the line in km from Leeds platform 1.
+// Elevation rises gently up the Aire valley from ~50m to ~120m.
+// ============================================================
+const ROUTE = {
+  name: 'Airedale Line',
+  service: '2L42 LEEDS → SKIPTON',
+  totalKm: 41.8,
+  // Stations: km along, name, code, platformLen(m), side('L'|'R'|'I' island), elevation(m)
+  stations: [
+    { km:  0.00, name: 'Leeds',                code: 'LDS', plat: 250, side: 'I', elev: 50, plat_no: 13 },
+    { km: 10.60, name: 'Apperley Bridge',      code: 'APY', plat: 100, side: 'L', elev: 80 },
+    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80 },
+    { km: 15.65, name: 'Saltaire',             code: 'SAE', plat: 110, side: 'L', elev: 80 },
+    { km: 19.50, name: 'Bingley',              code: 'BIY', plat: 130, side: 'L', elev: 90 },
+    { km: 20.85, name: 'Crossflatts',          code: 'CFL', plat:  95, side: 'L', elev: 95 },
+    { km: 25.45, name: 'Keighley',             code: 'KEI', plat: 175, side: 'I', elev: 100 },
+    { km: 28.55, name: 'Steeton & Silsden',    code: 'SON', plat: 100, side: 'L', elev: 115 },
+    { km: 32.50, name: 'Cononley',             code: 'CEY', plat:  95, side: 'L', elev: 110 },
+    { km: 41.80, name: 'Skipton',              code: 'SKI', plat: 200, side: 'I', elev: 120 },
+  ],
+  // Schedule (cumulative seconds from departure Leeds)
+  schedule: [0, 720, 1020, 1140, 1380, 1500, 1740, 1920, 2100, 2580],
+  // Speed limit segments: { kmStart, mph }
+  limits: [
+    { km:  0.00, mph: 25 },   // Leeds station throat
+    { km:  1.20, mph: 60 },
+    { km:  3.50, mph: 75 },   // line speed
+    { km: 14.00, mph: 30 },   // Shipley junction
+    { km: 14.80, mph: 50 },
+    { km: 15.30, mph: 75 },
+    { km: 19.20, mph: 40 },   // Bingley
+    { km: 20.00, mph: 75 },
+    { km: 25.00, mph: 30 },   // Keighley
+    { km: 26.00, mph: 75 },
+    { km: 41.20, mph: 25 },   // Skipton approach
+  ],
+  // Notable lineside features
+  features: [
+    { km:  4.20, type: 'tunnel', len: 30 },        // Bramley
+    { km: 15.55, type: 'mill',   side: 'L' },      // Salts Mill (UNESCO)
+    { km: 19.30, type: 'viaduct', len: 80 },       // Bingley
+    { km: 24.10, type: 'tunnel', len: 100 },       // approach Keighley
+    { km: 27.80, type: 'viaduct', len: 50 },
+  ],
+};
+
+// ============================================================
+// CLASS 333 specs
+// ============================================================
+const T333 = {
+  name: 'Class 333',
+  builder: 'CAF',
+  cars: 4,
+  lengthM: 96.4,
+  massT: 167,                        // tonnes empty + light load
+  maxMph: 100,
+  maxAccel: 0.85,                    // m/s² nominal
+  maxBrake: 1.10,                    // m/s² service
+  emergBrake: 1.40,                  // m/s² emergency
+  powerNotches: 5,                   // 0..4
+  brakeNotches: 7,                   // 0..6 (6 = emergency)
+  davisA: 1.20,  davisB: 0.012,  davisC: 0.00018,  // simplified rolling/aero
+};
+
+// ============================================================
+// MATH / UNITS
+// ============================================================
+const MPH_TO_MS = 0.44704;
+const MS_TO_MPH = 2.23694;
+const KM = 1000;
+const sin=Math.sin,cos=Math.cos,PI=Math.PI,abs=Math.abs,min=Math.min,max=Math.max,
+      floor=Math.floor,sqrt=Math.sqrt,rand=Math.random;
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+function smoothstep(a,b,x){const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}
+function fmtTime(s){s=floor(s);const m=floor(s/60),ss=s%60;return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');}
+
+// ============================================================
+// TRACK CENTRELINE (km → world XYZ)
+// World units: 1 = 1 metre. Track laid roughly along +X with gentle curves.
+// We apply low-frequency sinusoidal curvature for realism, plus the elevation
+// profile interpolated from station elevations.
+// ============================================================
+function trackPoint(km){
+  // Curvature: small lateral offset with km, more bends past Bingley
+  const x = km * KM;
+  const curveAmp = 80 + min(km, 30) * 4;
+  const z = sin(km * 0.18) * curveAmp + sin(km * 0.07 + 1.3) * curveAmp * 0.6;
+  // Elevation interpolated between station markers
+  const stns = ROUTE.stations;
+  let y = stns[0].elev;
+  for (let i = 0; i < stns.length - 1; i++) {
+    if (km >= stns[i].km && km <= stns[i+1].km) {
+      const t = (km - stns[i].km) / (stns[i+1].km - stns[i].km);
+      y = lerp(stns[i].elev, stns[i+1].elev, smoothstep(0,1,t));
+      break;
+    }
+  }
+  if (km > stns[stns.length-1].km) y = stns[stns.length-1].elev;
+  return new THREE.Vector3(x, y, z);
+}
+function trackTangent(km){
+  const a = trackPoint(km - 0.005);
+  const b = trackPoint(km + 0.005);
+  return b.clone().sub(a).normalize();
+}
+function trackFrame(km){
+  const p = trackPoint(km);
+  const t = trackTangent(km);
+  const up = new THREE.Vector3(0,1,0);
+  const r = new THREE.Vector3().crossVectors(t, up).normalize();   // right = tangent × up
+  const u = new THREE.Vector3().crossVectors(r, t).normalize();    // local up
+  return { p, t, r, u };
+}
+
+// Speed limit at a given km (mph)
+function speedLimitAt(km){
+  let mph = ROUTE.limits[0].mph;
+  for (const l of ROUTE.limits) if (km >= l.km) mph = l.mph;
+  return mph;
+}
+// Find next speed-limit reduction ahead of km (returns null if none harsher)
+function nextLimitDrop(km){
+  const cur = speedLimitAt(km);
+  for (const l of ROUTE.limits) {
+    if (l.km > km && l.mph < cur) return l;
+  }
+  return null;
+}
+function nextStation(km){
+  for (const s of ROUTE.stations) if (s.km > km + 0.02) return s;
+  return null;
+}
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+const canvas = document.getElementById('gc');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference:'high-performance' });
+renderer.setPixelRatio(min(window.devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = false;   // soft shadows are expensive on mobile; rely on AO/baked
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xb8c8d8, 400, 2200);
+
+const camera = new THREE.PerspectiveCamera(62, 1, 0.5, 4000);
+camera.position.set(0, 3.0, 0);
+
+// Sun + sky lighting
+const hemi = new THREE.HemisphereLight(0xcfe6f7, 0x4a5a3a, 0.85);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2d8, 1.5);
+sun.position.set(-400, 600, 200);
+scene.add(sun);
+const ambient = new THREE.AmbientLight(0x6a7888, 0.55);
+scene.add(ambient);
+
+// Sky gradient via a large inverted sphere. Made to follow the camera (added as a child of the camera below)
+// and the shader uses the LOCAL position as a direction vector so it is independent of camera world position.
+function buildSky(){
+  const g = new THREE.SphereGeometry(800, 32, 16);
+  const m = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      top:    { value: new THREE.Color(0x6ea7d6) },
+      mid:    { value: new THREE.Color(0xb6cee0) },
+      bottom: { value: new THREE.Color(0xd9d2c2) },
+      sunDir: { value: sun.position.clone().normalize() },
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      void main(){
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vDir;
+      uniform vec3 top, mid, bottom, sunDir;
+      void main(){
+        float h = clamp(vDir.y, -0.2, 1.0);
+        vec3 c;
+        if (h > 0.0) c = mix(mid, top, smoothstep(0.0, 0.7, h));
+        else         c = mix(mid, bottom, smoothstep(0.0, -0.2, h));
+        // Soft sun glow
+        float s = max(dot(vDir, normalize(sunDir)), 0.0);
+        c += vec3(1.0, 0.85, 0.6) * pow(s, 12.0) * 0.4;
+        c += vec3(1.0, 0.9, 0.7)  * pow(s, 256.0) * 1.2;
+        gl_FragColor = vec4(c, 1.0);
+      }
+    `,
+  });
+  return new THREE.Mesh(g, m);
+}
+const skyMesh = buildSky();
+// Sky stays in scene (so its rotation is fixed in world space and the sun glow points correctly),
+// but its position tracks the camera world position so the camera never leaves the sphere.
+scene.add(skyMesh);
+
+// ============================================================
+// PROCEDURAL TEXTURES (canvas-based, no external assets)
+// ============================================================
+function noiseTexture(size, fn){
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++){
+      const i = (y * size + x) * 4;
+      const [r,g,b] = fn(x / size, y / size);
+      img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=255;
+    }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function hash(x,y){const s=sin(x*127.1+y*311.7)*43758.5453;return s-floor(s);}
+function vnoise(x,y){
+  const xi=floor(x), yi=floor(y), xf=x-xi, yf=y-yi;
+  const a=hash(xi,yi), b=hash(xi+1,yi), c=hash(xi,yi+1), d=hash(xi+1,yi+1);
+  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+  return lerp(lerp(a,b,u), lerp(c,d,u), v);
+}
+function fbm(x,y,oct){let s=0,a=0.5,f=1;for(let i=0;i<oct;i++){s+=a*vnoise(x*f,y*f);f*=2;a*=0.5;}return s;}
+
+const texGrass = noiseTexture(256, (u,v)=>{
+  const n = fbm(u*8, v*8, 4);
+  const m = fbm(u*32+10, v*32+10, 3);
+  const r = 70 + n*60 + m*15;
+  const g = 95 + n*70 + m*20;
+  const b = 50 + n*30 + m*10;
+  return [r|0, g|0, b|0];
+});
+texGrass.repeat.set(120, 120);
+
+const texBallast = noiseTexture(256, (u,v)=>{
+  const n = fbm(u*22, v*22, 5);
+  const e = (n - 0.5) * 90 + 95;
+  return [e|0, e|0, (e-5)|0];
+});
+texBallast.repeat.set(60, 600);
+
+const texSleeper = noiseTexture(128, (u,v)=>{
+  const n = fbm(u*12, v*4, 3) * 30;
+  return [(70+n)|0, (55+n)|0, (40+n)|0];
+});
+texSleeper.repeat.set(1, 600);
+
+const texBrick = noiseTexture(256, (u,v)=>{
+  const row = floor(v*16);
+  const off = (row%2)*0.5;
+  const ux = (u+off)%1;
+  const cx = floor(ux*8), cy = row;
+  const mort = (abs((u+off)*8 - cx - 0.5) > 0.42) || (abs(v*16 - row - 0.5) > 0.40);
+  const n = fbm(u*40, v*40, 3);
+  if (mort) return [180,170,160];
+  const r = 130 + n*40 + (hash(cx,cy))*25;
+  const g = 60 + n*20;
+  const b = 50 + n*15;
+  return [r|0,g|0,b|0];
+});
+texBrick.repeat.set(8, 4);
+
+const texConcrete = noiseTexture(256, (u,v)=>{
+  const n = fbm(u*10, v*10, 4)*40 + fbm(u*60,v*60,2)*15;
+  const e = 150 + n;
+  return [e|0, (e-3)|0, (e-8)|0];
+});
+
+const texTarmac = noiseTexture(256, (u,v)=>{
+  const n = fbm(u*30,v*30,4)*30;
+  const e = 55 + n;
+  return [e|0, e|0, (e+2)|0];
+});
+
+// ============================================================
+// TERRAIN — large plane following the route corridor
+// ============================================================
+function buildTerrain(){
+  // We build segmented strips of grass either side of the track centreline,
+  // following the curved path. This avoids a giant flat plane fighting fog/perspective.
+  const group = new THREE.Group();
+  const totalKm = ROUTE.totalKm;
+  const stepKm = 0.05;            // 50m segments
+  const halfWidth = 350;          // 350m either side of track
+  const segs = floor(totalKm / stepKm);
+
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  let vi = 0;
+
+  for (let i = 0; i <= segs; i++){
+    const km = i * stepKm;
+    const f = trackFrame(km);
+    const left  = f.p.clone().add(f.r.clone().multiplyScalar(-halfWidth));
+    const right = f.p.clone().add(f.r.clone().multiplyScalar( halfWidth));
+    // Slight terrain undulation for visual interest, falling away from the line
+    const undL = sin(km*0.3)*4 + cos(km*0.7)*3;
+    const undR = sin(km*0.4+1)*4 + cos(km*0.6+0.5)*3;
+    left.y  += undL - 0.5;
+    right.y += undR - 0.5;
+    // Drop terrain slightly below track for ballast crown to read
+    left.y  -= 0.6;
+    right.y -= 0.6;
+    positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+    uvs.push(0, km, 1, km);
+    if (i < segs){
+      const a = vi, b = vi+1, c = vi+2, d = vi+3;
+      indices.push(a,c,b, b,c,d);
+    }
+    vi += 2;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs, 2));
+  g.setIndex(indices);
+  g.computeVertexNormals();
+  const m = new THREE.MeshStandardMaterial({ map: texGrass, roughness: 0.95, metalness: 0.0, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(g, m);
+  group.add(mesh);
+  return group;
+}
+scene.add(buildTerrain());
+
+// ============================================================
+// TRACK — ballast + sleepers + rails, swept along centreline
+// ============================================================
+function buildTrack(){
+  const group = new THREE.Group();
+  const stepKm = 0.02;          // 20m geometry segments
+  const segs = floor(ROUTE.totalKm / stepKm);
+
+  // BALLAST (a textured ribbon)
+  const ballastWidth = 4.4;
+  {
+    const positions = [], uvs = [], indices = [];
+    let vi = 0;
+    for (let i = 0; i <= segs; i++){
+      const km = i * stepKm;
+      const f = trackFrame(km);
+      const left  = f.p.clone().add(f.r.clone().multiplyScalar(-ballastWidth/2)).add(new THREE.Vector3(0,-0.3,0));
+      const right = f.p.clone().add(f.r.clone().multiplyScalar( ballastWidth/2)).add(new THREE.Vector3(0,-0.3,0));
+      positions.push(left.x,left.y,left.z, right.x,right.y,right.z);
+      uvs.push(0, km*8, 1, km*8);
+      if (i<segs){
+        indices.push(vi, vi+2, vi+1, vi+1, vi+2, vi+3);
+      }
+      vi += 2;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs, 2));
+    g.setIndex(indices); g.computeVertexNormals();
+    const m = new THREE.MeshStandardMaterial({ map: texBallast, roughness: 1.0, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(g, m));
+  }
+
+  // RAILS — two parallel rails, modest cross-section
+  const rg = new THREE.Group();
+  const railHalf = 0.7175;       // 1435mm gauge / 2
+  function buildRail(offsetSign){
+    const pts = [];
+    const stepRail = 0.05;       // tighter for smooth highlights
+    const railSegs = floor(ROUTE.totalKm / stepRail);
+    for (let i = 0; i <= railSegs; i++){
+      const km = i * stepRail;
+      const f = trackFrame(km);
+      const p = f.p.clone().add(f.r.clone().multiplyScalar(offsetSign * railHalf)).add(new THREE.Vector3(0,-0.10,0));
+      pts.push(p);
+    }
+    const path = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.5);
+    const railShape = new THREE.Shape();
+    railShape.moveTo(-0.035, 0); railShape.lineTo(0.035, 0);
+    railShape.lineTo(0.035, 0.10); railShape.lineTo(0.020, 0.10);
+    railShape.lineTo(0.020, 0.13); railShape.lineTo(-0.020, 0.13);
+    railShape.lineTo(-0.020, 0.10); railShape.lineTo(-0.035, 0.10);
+    railShape.lineTo(-0.035, 0);
+    const geom = new THREE.ExtrudeGeometry(railShape, {
+      steps: pts.length * 2, extrudePath: path, bevelEnabled: false,
+    });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, metalness: 0.85, roughness: 0.35 });
+    return new THREE.Mesh(geom, mat);
+  }
+  rg.add(buildRail(-1));
+  rg.add(buildRail( 1));
+  group.add(rg);
+
+  // SLEEPERS — instanced boxes at 0.6m spacing
+  const sleeperGeo = new THREE.BoxGeometry(2.6, 0.18, 0.22);
+  const sleeperMat = new THREE.MeshStandardMaterial({ map: texSleeper, roughness: 1.0 });
+  const sleeperSpacing = 0.65;
+  const totalM = ROUTE.totalKm * KM;
+  const count = floor(totalM / sleeperSpacing);
+  const inst = new THREE.InstancedMesh(sleeperGeo, sleeperMat, count);
+  const tmp = new THREE.Object3D();
+  for (let i = 0; i < count; i++){
+    const km = (i * sleeperSpacing) / KM;
+    const f = trackFrame(km);
+    tmp.position.copy(f.p).add(new THREE.Vector3(0,-0.20,0));
+    const yaw = Math.atan2(-f.t.x, -f.t.z);
+    tmp.rotation.set(0, yaw, 0);
+    tmp.updateMatrix();
+    inst.setMatrixAt(i, tmp.matrix);
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  group.add(inst);
+
+  return group;
+}
+scene.add(buildTrack());
+
+// ============================================================
+// OHLE — overhead line equipment (poles + contact wire)
+// ============================================================
+function buildOHLE(){
+  const group = new THREE.Group();
+  const spacing = 60;            // typical 50–70m
+  const totalM = ROUTE.totalKm * KM;
+  const count = floor(totalM / spacing);
+
+  // Pole geometry — H-section approximated by a box
+  const poleGeo = new THREE.BoxGeometry(0.18, 6.5, 0.18);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4d54, roughness: 0.7, metalness: 0.5 });
+  const armGeo  = new THREE.BoxGeometry(4.0, 0.10, 0.10);
+
+  const polesL = new THREE.InstancedMesh(poleGeo, poleMat, count);
+  const polesR = new THREE.InstancedMesh(poleGeo, poleMat, count);
+  const armsL  = new THREE.InstancedMesh(armGeo,  poleMat, count);
+  const armsR  = new THREE.InstancedMesh(armGeo,  poleMat, count);
+  const tmp = new THREE.Object3D();
+
+  // Contact wire vertices (LineSegments)
+  const wirePos = [];
+
+  for (let i = 0; i < count; i++){
+    const km = (i * spacing) / KM;
+    const f = trackFrame(km);
+    const yaw = Math.atan2(-f.t.x, -f.t.z);
+    // left pole
+    const lp = f.p.clone().add(f.r.clone().multiplyScalar(-2.6)).add(new THREE.Vector3(0, 3.25, 0));
+    tmp.position.copy(lp); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
+    polesL.setMatrixAt(i, tmp.matrix);
+    // right pole
+    const rp = f.p.clone().add(f.r.clone().multiplyScalar( 2.6)).add(new THREE.Vector3(0, 3.25, 0));
+    tmp.position.copy(rp); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
+    polesR.setMatrixAt(i, tmp.matrix);
+    // arms (cantilevers)
+    const armL = lp.clone().add(new THREE.Vector3(0, 2.6, 0)).add(f.r.clone().multiplyScalar(1.3));
+    tmp.position.copy(armL); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
+    armsL.setMatrixAt(i, tmp.matrix);
+    const armR = rp.clone().add(new THREE.Vector3(0, 2.6, 0)).add(f.r.clone().multiplyScalar(-1.3));
+    tmp.position.copy(armR); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
+    armsR.setMatrixAt(i, tmp.matrix);
+
+    // contact wire point above track centreline
+    const cw = f.p.clone().add(new THREE.Vector3(0, 5.3, 0));
+    if (i > 0) {
+      const km0 = ((i-1) * spacing) / KM;
+      const f0 = trackFrame(km0);
+      const cw0 = f0.p.clone().add(new THREE.Vector3(0, 5.3, 0));
+      wirePos.push(cw0.x, cw0.y, cw0.z, cw.x, cw.y, cw.z);
+    }
+  }
+  polesL.instanceMatrix.needsUpdate = true;
+  polesR.instanceMatrix.needsUpdate = true;
+  armsL.instanceMatrix.needsUpdate  = true;
+  armsR.instanceMatrix.needsUpdate  = true;
+  group.add(polesL); group.add(polesR); group.add(armsL); group.add(armsR);
+
+  const wireGeo = new THREE.BufferGeometry();
+  wireGeo.setAttribute('position', new THREE.Float32BufferAttribute(wirePos, 3));
+  const wireMat = new THREE.LineBasicMaterial({ color: 0x222222 });
+  group.add(new THREE.LineSegments(wireGeo, wireMat));
+
+  return group;
+}
+scene.add(buildOHLE());
+
+// ============================================================
+// STATIONS — platforms + canopies + name boards
+// ============================================================
+function makeNameBoardTexture(name, code){
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,1024,256);
+  // Northern Trains-ish blue band
+  ctx.fillStyle = '#003a6e'; ctx.fillRect(0,0,1024,40);
+  ctx.fillStyle = '#003a6e'; ctx.fillRect(0,216,1024,40);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = 'bold 110px Roboto Mono, monospace';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(name, 512, 132);
+  ctx.fillStyle = '#003a6e';
+  ctx.font = 'bold 40px Roboto Mono, monospace';
+  ctx.fillText(code, 512, 196);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function buildStations(){
+  const group = new THREE.Group();
+  for (const s of ROUTE.stations){
+    const f = trackFrame(s.km);
+    const yaw = Math.atan2(-f.t.x, -f.t.z);
+    const platformH = 0.95;
+    const platformW = 3.5;
+    const platLen = s.plat;
+    const sg = new THREE.Group();
+    sg.position.copy(f.p);
+    sg.rotation.y = yaw;
+
+    function platformAt(side){
+      const pg = new THREE.Group();
+      const sign = (side === 'L') ? -1 : 1;
+      const offset = sign * (1.8 + platformW/2);   // beyond track gauge
+      // Platform slab
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(platformW, platformH, platLen),
+        new THREE.MeshStandardMaterial({ map: texConcrete, roughness: 0.85 })
+      );
+      slab.position.set(offset, platformH/2, 0);
+      pg.add(slab);
+      // Yellow safety line
+      const yellow = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.25, platLen-2),
+        new THREE.MeshBasicMaterial({ color: 0xffd23a })
+      );
+      yellow.rotation.x = -PI/2;
+      yellow.position.set(offset - sign*(platformW/2 - 0.5), platformH+0.005, 0);
+      pg.add(yellow);
+      // Tactile strip (darker line nearer edge)
+      const tactile = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.10, platLen-2),
+        new THREE.MeshBasicMaterial({ color: 0x2a2a2a })
+      );
+      tactile.rotation.x = -PI/2;
+      tactile.position.set(offset - sign*(platformW/2 - 0.20), platformH+0.006, 0);
+      pg.add(tactile);
+
+      // Lampposts every 25m
+      const lampMat = new THREE.MeshStandardMaterial({ color: 0x202020, metalness:0.6, roughness:0.5 });
+      const lampHeadMat = new THREE.MeshStandardMaterial({ color: 0xffeebb, emissive: 0xffeebb, emissiveIntensity: 0.7 });
+      const lampN = max(2, floor(platLen / 25));
+      for (let i = 0; i < lampN; i++){
+        const t = (i + 0.5) / lampN;
+        const z = (t - 0.5) * (platLen - 4);
+        const lg = new THREE.Group();
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 4.0, 8), lampMat);
+        post.position.set(offset, platformH + 2.0, z);
+        lg.add(post);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), lampHeadMat);
+        head.position.set(offset, platformH + 4.0, z);
+        lg.add(head);
+        pg.add(lg);
+      }
+      // Shelter (a small canopy)
+      const shelter = new THREE.Mesh(
+        new THREE.BoxGeometry(platformW*0.8, 0.20, min(platLen*0.4, 16)),
+        new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness:0.7, metalness:0.3 })
+      );
+      shelter.position.set(offset + sign*0.0, platformH + 2.6, 0);
+      pg.add(shelter);
+      // Shelter posts
+      const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
+      [-1,1].forEach(dx=>[-1,1].forEach(dz=>{
+        const pst = new THREE.Mesh(postGeo, lampMat);
+        pst.position.set(offset + dx*platformW*0.3, platformH+1.3, dz*min(platLen*0.18, 7));
+        pg.add(pst);
+      }));
+      // Name board
+      const tex = makeNameBoardTexture(s.name, s.code);
+      const board = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.0, 1.0),
+        new THREE.MeshBasicMaterial({ map: tex })
+      );
+      board.position.set(offset, platformH + 1.8, -platLen*0.15);
+      board.rotation.y = sign>0 ? PI : 0;
+      pg.add(board);
+      const board2 = board.clone();
+      board2.position.set(offset, platformH + 1.8, platLen*0.15);
+      pg.add(board2);
+      return pg;
+    }
+
+    if (s.side === 'I'){
+      // Island platform — represent as platform on both sides (slightly inset)
+      sg.add(platformAt('L'));
+      sg.add(platformAt('R'));
+    } else {
+      sg.add(platformAt(s.side));
+    }
+    group.add(sg);
+  }
+  return group;
+}
+scene.add(buildStations());
+
+// ============================================================
+// SIGNALS — colour-light heads at sensible spacing
+// We place a signal ~250m before each station and at speed-limit boundaries.
+// ============================================================
+const SIGNALS = [];
+function buildSignals(){
+  const group = new THREE.Group();
+  const positions = [];
+  for (const s of ROUTE.stations) positions.push({ km: max(0.05, s.km - 0.25), kind: 'station' });
+  for (const l of ROUTE.limits)   if (l.km > 0.1) positions.push({ km: l.km - 0.20, kind: 'limit' });
+  positions.sort((a,b)=>a.km-b.km);
+
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 });
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x303030, roughness: 0.7 });
+  const lensRed   = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 0.2 });
+  const lensYel   = new THREE.MeshStandardMaterial({ color: 0xffaa10, emissive: 0xffaa10, emissiveIntensity: 0.2 });
+  const lensGrn   = new THREE.MeshStandardMaterial({ color: 0x00cc44, emissive: 0x00cc44, emissiveIntensity: 0.2 });
+
+  for (const p of positions){
+    const f = trackFrame(p.km);
+    const yaw = Math.atan2(-f.t.x, -f.t.z);
+    const sg = new THREE.Group();
+    const sign = -1;   // signals on driver's side (UK left running)
+    sg.position.copy(f.p).add(f.r.clone().multiplyScalar(sign * 3.4));
+    sg.rotation.y = yaw;
+
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.12, 4.5, 8), postMat);
+    post.position.y = 2.25;
+    sg.add(post);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.4, 0.3), headMat);
+    head.position.y = 4.5;
+    sg.add(head);
+
+    const lensGeo = new THREE.CircleGeometry(0.13, 16);
+    const red = new THREE.Mesh(lensGeo, lensRed.clone());
+    red.position.set(0, 4.95, 0.16); sg.add(red);
+    const yel = new THREE.Mesh(lensGeo, lensYel.clone());
+    yel.position.set(0, 4.55, 0.16); sg.add(yel);
+    const grn = new THREE.Mesh(lensGeo, lensGrn.clone());
+    grn.position.set(0, 4.15, 0.16); sg.add(grn);
+
+    group.add(sg);
+    SIGNALS.push({ km: p.km, mesh: sg, red, yel, grn, aspect: 'G' });
+  }
+  return group;
+}
+scene.add(buildSignals());
+
+function setSignalAspect(s, aspect){
+  s.aspect = aspect;
+  s.red.material.emissiveIntensity = aspect === 'R' ? 1.5 : 0.05;
+  s.yel.material.emissiveIntensity = (aspect === 'Y' || aspect === 'YY') ? 1.5 : 0.05;
+  s.grn.material.emissiveIntensity = aspect === 'G' ? 1.5 : 0.05;
+}
+SIGNALS.forEach(s => setSignalAspect(s, 'G'));
+
+// ============================================================
+// TREES + BUILDINGS — procedural lineside scenery
+// ============================================================
+function buildScatter(){
+  const group = new THREE.Group();
+  const rng = (seed=>()=>{seed=(seed*1664525+1013904223)|0;return((seed>>>0)/4294967296);})(12345);
+
+  // TREES — billboard quads with simple silhouette
+  const treeCanvas = document.createElement('canvas');
+  treeCanvas.width = 128; treeCanvas.height = 192;
+  {
+    const ctx = treeCanvas.getContext('2d');
+    ctx.clearRect(0,0,128,192);
+    // Trunk
+    ctx.fillStyle = '#3a2a1c';
+    ctx.fillRect(58, 130, 12, 60);
+    // Foliage clusters
+    for (let i = 0; i < 30; i++){
+      const x = 64 + (rng()-0.5)*70;
+      const y = 30 + rng()*100;
+      const r = 18 + rng()*22;
+      const g = 50 + (rng()*40)|0;
+      ctx.fillStyle = `rgb(${20+rng()*40|0},${g+30|0},${30+rng()*30|0})`;
+      ctx.beginPath(); ctx.arc(x,y,r,0,PI*2); ctx.fill();
+    }
+  }
+  const treeTex = new THREE.CanvasTexture(treeCanvas);
+  treeTex.colorSpace = THREE.SRGBColorSpace;
+  const treeMat = new THREE.MeshBasicMaterial({ map: treeTex, transparent: true, alphaTest: 0.45, side: THREE.DoubleSide });
+  const treeGeo = new THREE.PlaneGeometry(8, 12);
+
+  const treeCount = 1800;
+  const trees = new THREE.InstancedMesh(treeGeo, treeMat, treeCount);
+  const tmp = new THREE.Object3D();
+  for (let i = 0; i < treeCount; i++){
+    const km = rng() * ROUTE.totalKm;
+    const f = trackFrame(km);
+    const side = rng() < 0.5 ? -1 : 1;
+    const dist = 18 + rng()*220;
+    const p = f.p.clone().add(f.r.clone().multiplyScalar(side * dist));
+    p.y += 5.5 + (rng()-0.5)*1.5;
+    tmp.position.copy(p);
+    tmp.scale.setScalar(0.7 + rng()*1.2);
+    tmp.rotation.set(0, rng()*PI*2, 0);
+    tmp.updateMatrix();
+    trees.setMatrixAt(i, tmp.matrix);
+  }
+  trees.instanceMatrix.needsUpdate = true;
+  group.add(trees);
+
+  // BUILDINGS — boxes with brick texture, scattered further out, denser around stations
+  const bldGeo = new THREE.BoxGeometry(1,1,1);
+  const bldMat = new THREE.MeshStandardMaterial({ map: texBrick, roughness: 0.95 });
+  const bldCount = 700;
+  const buildings = new THREE.InstancedMesh(bldGeo, bldMat, bldCount);
+  for (let i = 0; i < bldCount; i++){
+    // Bias toward stations
+    const s = ROUTE.stations[floor(rng()*ROUTE.stations.length)];
+    const km = clamp(s.km + (rng()-0.5)*1.6, 0.2, ROUTE.totalKm-0.2);
+    const f = trackFrame(km);
+    const side = rng() < 0.5 ? -1 : 1;
+    const dist = 35 + rng()*200;
+    const p = f.p.clone().add(f.r.clone().multiplyScalar(side * dist));
+    const w = 4 + rng()*10, h = 4 + rng()*8, d = 4 + rng()*10;
+    p.y += h/2 - 0.5;
+    tmp.position.copy(p);
+    tmp.scale.set(w, h, d);
+    tmp.rotation.set(0, rng()*PI*2, 0);
+    tmp.updateMatrix();
+    buildings.setMatrixAt(i, tmp.matrix);
+  }
+  buildings.instanceMatrix.needsUpdate = true;
+  group.add(buildings);
+
+  return group;
+}
+scene.add(buildScatter());
+
+// ============================================================
+// LANDMARKS — Salts Mill, viaducts, tunnels
+// ============================================================
+function buildLandmarks(){
+  const group = new THREE.Group();
+  for (const ft of ROUTE.features){
+    const f = trackFrame(ft.km);
+    const yaw = Math.atan2(-f.t.x, -f.t.z);
+    if (ft.type === 'mill'){
+      // Salts Mill — tall sandstone block with chimney
+      const g = new THREE.Group();
+      g.position.copy(f.p).add(f.r.clone().multiplyScalar(-50));
+      g.rotation.y = yaw;
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0xc8a06b, roughness: 0.95 });
+      const main = new THREE.Mesh(new THREE.BoxGeometry(70, 18, 25), stoneMat);
+      main.position.set(0, 9, 0);
+      g.add(main);
+      const chimney = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.6, 2.2, 32, 12),
+        new THREE.MeshStandardMaterial({ color: 0x8b6a4a, roughness: 0.95 })
+      );
+      chimney.position.set(-25, 16, -8);
+      g.add(chimney);
+      group.add(g);
+    } else if (ft.type === 'viaduct'){
+      // Stone arches under the track
+      const g = new THREE.Group();
+      g.position.copy(f.p).add(new THREE.Vector3(0,-3,0));
+      g.rotation.y = yaw;
+      const stone = new THREE.MeshStandardMaterial({ color: 0xa3866a, roughness: 0.95 });
+      const arches = floor(ft.len / 10);
+      for (let i = 0; i < arches; i++){
+        const x = (i - arches/2) * 10;
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(2, 8, 6), stone);
+        pier.position.set(0, -2, x);
+        g.add(pier);
+      }
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(8, 2, ft.len), stone);
+      deck.position.set(0, 1.5, 0);
+      g.add(deck);
+      group.add(g);
+    } else if (ft.type === 'tunnel'){
+      // Tunnel portal + dark interior
+      const g = new THREE.Group();
+      g.position.copy(f.p);
+      g.rotation.y = yaw;
+      const portalMat = new THREE.MeshStandardMaterial({ color: 0x4a4030, roughness: 0.95 });
+      const portal = new THREE.Mesh(
+        new THREE.BoxGeometry(10, 8, 1.5),
+        portalMat
+      );
+      portal.position.set(0, 4, -ft.len/2 - 1);
+      g.add(portal);
+      // Mouth (dark)
+      const mouth = new THREE.Mesh(
+        new THREE.PlaneGeometry(6, 6),
+        new THREE.MeshBasicMaterial({ color: 0x000000 })
+      );
+      mouth.position.set(0, 3, -ft.len/2 - 0.7);
+      g.add(mouth);
+      // Far portal
+      const portal2 = portal.clone();
+      portal2.position.set(0, 4, ft.len/2 + 1);
+      g.add(portal2);
+      group.add(g);
+    }
+  }
+  return group;
+}
+scene.add(buildLandmarks());
+
+// ============================================================
+// CAB — Class 333 driver's cab geometry, anchored to camera rig
+// We build the cab as foreground geometry parented to the train's frame so
+// the windscreen always frames the forward view.
+// ============================================================
+const cabGroup = new THREE.Group();
+scene.add(cabGroup);
+
+// We render cab elements with a separate camera trick? No — keep it simple:
+// they're just objects that follow the train. They'll occlude correctly.
+const cab = (function buildCab(){
+  const g = new THREE.Group();
+
+  // Cab is built with -Z = forward (driver looks out windscreen), matching camera default.
+  // Dashboard slab
+  const dashMat = new THREE.MeshStandardMaterial({ color: 0x2c2e30, roughness: 0.6, metalness: 0.1 });
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.38, 1.0), dashMat);
+  dash.position.set(0, 1.05, -1.20);
+  g.add(dash);
+
+  // Lower dashboard return
+  const dash2 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.9, 0.30), dashMat);
+  dash2.position.set(0, 0.55, -1.55);
+  g.add(dash2);
+
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.BoxGeometry(3.4, 0.05, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x1c1d1f, roughness: 0.9 })
+  );
+  floor.position.set(0, 0.0, -0.5);
+  g.add(floor);
+
+  // A-pillars and roof frame (frames the windscreen)
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x202225, roughness: 0.5, metalness: 0.3 });
+  const pillarL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.4, 0.18), frameMat);
+  pillarL.position.set(-1.55, 1.5, -0.55);
+  g.add(pillarL);
+  const pillarR = pillarL.clone();
+  pillarR.position.set(1.55, 1.5, -0.55);
+  g.add(pillarR);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.18, 1.6), frameMat);
+  roof.position.set(0, 2.55, -1.0);
+  g.add(roof);
+  // Roof headliner
+  const headliner = new THREE.Mesh(
+    new THREE.BoxGeometry(3.2, 0.05, 1.6),
+    new THREE.MeshStandardMaterial({ color: 0xe2e1dd, roughness: 0.9 })
+  );
+  headliner.position.set(0, 2.45, -1.0);
+  g.add(headliner);
+  // Centre pillar (between two windscreens)
+  const cpillar = new THREE.Mesh(new THREE.BoxGeometry(0.10, 2.0, 0.10), frameMat);
+  cpillar.position.set(0, 1.55, -0.45);
+  g.add(cpillar);
+  // Wiper arms (animated later)
+  const wiperMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness:0.6, roughness:0.4 });
+  const wL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.9), wiperMat);
+  wL.geometry.translate(0, 0, -0.45);
+  wL.position.set(-0.85, 1.92, -0.48);
+  wL.userData.base = wL.rotation.clone(); g.add(wL);
+  const wR = wL.clone();
+  wR.position.set(0.85, 1.92, -0.48);
+  g.add(wR);
+
+  // Speedometer
+  const gaugeFace = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0a0d10'; ctx.fillRect(0,0,256,256);
+    ctx.strokeStyle = '#cfe6f7'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(128,128, 110, PI*0.75, PI*2.25); ctx.stroke();
+    ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 20px Roboto Mono'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    for (let i=0;i<=10;i++){
+      const a = PI*0.75 + (PI*1.5)*(i/10);
+      const x1 = 128+cos(a)*98, y1 = 128+sin(a)*98;
+      const x2 = 128+cos(a)*112, y2 = 128+sin(a)*112;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.fillText(String(i*10), 128+cos(a)*78, 128+sin(a)*78);
+    }
+    ctx.fillStyle = '#9ccfff';
+    ctx.font='bold 16px Orbitron'; ctx.fillText('MPH', 128, 200);
+    ctx.font='10px Roboto Mono'; ctx.fillText('CLASS 333', 128, 60);
+    return new THREE.CanvasTexture(c);
+  })();
+  const speedo = new THREE.Mesh(
+    new THREE.CircleGeometry(0.16, 32),
+    new THREE.MeshBasicMaterial({ map: gaugeFace })
+  );
+  speedo.rotation.x = -PI*0.45;
+  speedo.position.set(-0.45, 1.27, -1.05);
+  g.add(speedo);
+  const speedoNeedle = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.012, 0.13),
+    new THREE.MeshBasicMaterial({ color: 0xff5c5c })
+  );
+  speedoNeedle.geometry.translate(0, 0.06, 0);
+  speedoNeedle.rotation.x = -PI*0.45;
+  speedoNeedle.position.set(-0.45, 1.275, -1.045);
+  g.add(speedoNeedle);
+
+  // Brake pressure gauge (right of speedo)
+  const pressFace = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0a0d10'; ctx.fillRect(0,0,256,256);
+    ctx.strokeStyle = '#cfe6f7'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(128,128, 110, PI*0.75, PI*2.25); ctx.stroke();
+    ctx.fillStyle = '#cfe6f7'; ctx.font='bold 14px Roboto Mono'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    for (let i=0;i<=8;i++){
+      const a = PI*0.75 + (PI*1.5)*(i/8);
+      ctx.fillText(String(i), 128+cos(a)*78, 128+sin(a)*78);
+    }
+    ctx.fillStyle = '#9ccfff'; ctx.font='10px Orbitron'; ctx.fillText('BRAKE BAR', 128, 200);
+    return new THREE.CanvasTexture(c);
+  })();
+  const press = new THREE.Mesh(
+    new THREE.CircleGeometry(0.13, 32),
+    new THREE.MeshBasicMaterial({ map: pressFace })
+  );
+  press.rotation.x = -PI*0.45;
+  press.position.set(0.45, 1.27, -1.05);
+  g.add(press);
+  const pressNeedle = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.010, 0.10),
+    new THREE.MeshBasicMaterial({ color: 0xff5c5c })
+  );
+  pressNeedle.geometry.translate(0, 0.05, 0);
+  pressNeedle.rotation.x = -PI*0.45;
+  pressNeedle.position.set(0.45, 1.275, -1.045);
+  g.add(pressNeedle);
+
+  // Master controller (centre, combined power/brake)
+  const mcBase = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.10, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x16181a, roughness:0.6 })
+  );
+  mcBase.position.set(0, 1.10, -1.05);
+  g.add(mcBase);
+  // Notch labels strip
+  const notchTex = (()=> {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0a0c0e'; ctx.fillRect(0,0,512,96);
+    ctx.strokeStyle = '#5cc8ff'; ctx.lineWidth = 2;
+    ctx.strokeRect(2,2,508,92);
+    const labels = ['EB','B6','B5','B4','B3','B2','B1','OFF','P1','P2','P3','P4'];
+    ctx.font = 'bold 18px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    labels.forEach((l,i)=>{
+      const x = 22 + i * (468/(labels.length-1));
+      ctx.fillStyle = (l==='OFF') ? '#9ccfff' : (l[0]==='B'||l==='EB') ? '#ffaa66' : '#9cffaf';
+      ctx.fillText(l, x, 48);
+    });
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const notchStrip = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.46, 0.07),
+    new THREE.MeshBasicMaterial({ map: notchTex })
+  );
+  notchStrip.rotation.x = -PI/2;
+  notchStrip.position.set(0, 1.155, -1.05);
+  g.add(notchStrip);
+  // Lever
+  const leverMat = new THREE.MeshStandardMaterial({ color: 0xc02828, metalness:0.4, roughness:0.4 });
+  const lever = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.30, 12), leverMat);
+  stick.position.y = 0.15;
+  lever.add(stick);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), leverMat);
+  knob.position.y = 0.32;
+  lever.add(knob);
+  lever.position.set(0, 1.16, -1.05);
+  g.add(lever);
+
+  // Horn lever (left side)
+  const horn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.025, 0.030, 0.25, 12),
+    new THREE.MeshStandardMaterial({ color: 0x202225, metalness:0.6, roughness:0.4 })
+  );
+  horn.position.set(-1.30, 1.20, -1.05);
+  horn.rotation.z = 0.25;
+  g.add(horn);
+
+  // AWS sunflower indicator (right of speedo)
+  const awsTexN = (()=> {
+    const c = document.createElement('canvas'); c.width=c.height=128;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0,0,128,128);
+    // Black solid disc — clear AWS
+    ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(64,64,56,0,PI*2); ctx.fill();
+    ctx.strokeStyle = '#666'; ctx.lineWidth = 3; ctx.stroke();
+    return new THREE.CanvasTexture(c);
+  })();
+  const awsTexW = (()=> {
+    const c = document.createElement('canvas'); c.width=c.height=128;
+    const ctx = c.getContext('2d');
+    // Yellow & black sunflower
+    for (let i=0;i<8;i++){
+      ctx.fillStyle = (i%2===0)?'#ffd400':'#000';
+      ctx.beginPath(); ctx.moveTo(64,64);
+      ctx.arc(64,64, 56, i*PI/4, (i+1)*PI/4); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(64,64,18,0,PI*2); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  })();
+  const awsMat = new THREE.MeshBasicMaterial({ map: awsTexN });
+  const aws = new THREE.Mesh(new THREE.CircleGeometry(0.06, 32), awsMat);
+  aws.rotation.x = -PI*0.45;
+  aws.position.set(-0.12, 1.27, -1.05);
+  g.add(aws);
+
+  // DSD pedal indicator + a few status LEDs
+  function led(color, x){
+    const led = new THREE.Mesh(
+      new THREE.CircleGeometry(0.018, 16),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    led.rotation.x = -PI*0.45;
+    led.position.set(x, 1.27, -1.05);
+    g.add(led);
+    return led;
+  }
+  const ledHead = led(0x222222, 0.15);
+  const ledDoor = led(0x222222, 0.20);
+  const ledDsd  = led(0x222222, 0.25);
+
+  return {
+    group: g,
+    speedoNeedle, pressNeedle,
+    lever,
+    awsMat, awsTexN, awsTexW,
+    ledHead, ledDoor, ledDsd,
+    wL, wR,
+  };
+})();
+cabGroup.add(cab.group);
+
+// ============================================================
+// AUDIO ENGINE — procedural via WebAudio (no external assets)
+// ============================================================
+const AUDIO = {
+  ctx: null,
+  master: null,
+  tractionGain: null, tractionOsc1: null, tractionOsc2: null, tractionFilter: null, tractionLfo: null, tractionLfoGain: null,
+  brakeNoise: null, brakeNoiseGain: null,
+  awsGain: null, awsOsc: null,
+  hornGain: null, hornOsc1: null, hornOsc2: null,
+  initialised: false,
+};
+function makeNoiseBuffer(ctx, dur){
+  const len = ctx.sampleRate * dur;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * 0.6;
+  return buf;
+}
+function initAudio(){
+  if (AUDIO.initialised) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  AUDIO.ctx = ctx;
+  AUDIO.master = ctx.createGain(); AUDIO.master.gain.value = 0.55; AUDIO.master.connect(ctx.destination);
+
+  // TRACTION — two saw oscillators through a low-pass filter, frequency tracks speed.
+  // Class 333 has a noticeable inverter whine; we approximate with two close-tuned oscillators.
+  AUDIO.tractionGain = ctx.createGain(); AUDIO.tractionGain.gain.value = 0;
+  AUDIO.tractionFilter = ctx.createBiquadFilter();
+  AUDIO.tractionFilter.type = 'lowpass'; AUDIO.tractionFilter.frequency.value = 900;
+  AUDIO.tractionOsc1 = ctx.createOscillator(); AUDIO.tractionOsc1.type = 'sawtooth'; AUDIO.tractionOsc1.frequency.value = 60;
+  AUDIO.tractionOsc2 = ctx.createOscillator(); AUDIO.tractionOsc2.type = 'square';   AUDIO.tractionOsc2.frequency.value = 90;
+  const o1g = ctx.createGain(); o1g.gain.value = 0.5;
+  const o2g = ctx.createGain(); o2g.gain.value = 0.25;
+  AUDIO.tractionOsc1.connect(o1g).connect(AUDIO.tractionFilter);
+  AUDIO.tractionOsc2.connect(o2g).connect(AUDIO.tractionFilter);
+  AUDIO.tractionFilter.connect(AUDIO.tractionGain).connect(AUDIO.master);
+  AUDIO.tractionOsc1.start(); AUDIO.tractionOsc2.start();
+
+  // BRAKE — pink-ish noise gated by application
+  const noise = ctx.createBufferSource();
+  noise.buffer = makeNoiseBuffer(ctx, 2.0);
+  noise.loop = true;
+  const bf = ctx.createBiquadFilter(); bf.type='bandpass'; bf.frequency.value=1800; bf.Q.value=0.7;
+  AUDIO.brakeNoiseGain = ctx.createGain(); AUDIO.brakeNoiseGain.gain.value = 0;
+  noise.connect(bf).connect(AUDIO.brakeNoiseGain).connect(AUDIO.master);
+  noise.start();
+  AUDIO.brakeNoise = noise;
+
+  // AWS — bell (clear) and buzzer (warning) — we drive frequency to switch.
+  AUDIO.awsGain = ctx.createGain(); AUDIO.awsGain.gain.value = 0;
+  AUDIO.awsOsc = ctx.createOscillator(); AUDIO.awsOsc.type = 'square'; AUDIO.awsOsc.frequency.value = 800;
+  const awsFilt = ctx.createBiquadFilter(); awsFilt.type = 'bandpass'; awsFilt.frequency.value = 800;
+  AUDIO.awsOsc.connect(awsFilt).connect(AUDIO.awsGain).connect(AUDIO.master);
+  AUDIO.awsOsc.start();
+
+  // HORN — two-tone, high+low
+  AUDIO.hornGain = ctx.createGain(); AUDIO.hornGain.gain.value = 0;
+  AUDIO.hornOsc1 = ctx.createOscillator(); AUDIO.hornOsc1.type = 'sawtooth'; AUDIO.hornOsc1.frequency.value = 370;   // F#4
+  AUDIO.hornOsc2 = ctx.createOscillator(); AUDIO.hornOsc2.type = 'sawtooth'; AUDIO.hornOsc2.frequency.value = 246;   // B3
+  const hf = ctx.createBiquadFilter(); hf.type='lowpass'; hf.frequency.value=2200;
+  AUDIO.hornOsc1.connect(hf); AUDIO.hornOsc2.connect(hf);
+  hf.connect(AUDIO.hornGain).connect(AUDIO.master);
+  AUDIO.hornOsc1.start(); AUDIO.hornOsc2.start();
+
+  AUDIO.initialised = true;
+}
+function audioTick(state, dt){
+  if (!AUDIO.initialised) return;
+  const ctx = AUDIO.ctx;
+  // Traction: gain ramps with throttle*speed; pitch with speed
+  const speed = state.v;
+  const power = max(0, state.notch);    // notch >0 = power
+  const tractionTarget = power * 0.18 * smoothstep(0.5, 25, speed);
+  AUDIO.tractionGain.gain.linearRampToValueAtTime(tractionTarget, ctx.currentTime + 0.15);
+  const baseHz = 50 + speed * 4.5;
+  AUDIO.tractionOsc1.frequency.linearRampToValueAtTime(baseHz, ctx.currentTime + 0.2);
+  AUDIO.tractionOsc2.frequency.linearRampToValueAtTime(baseHz * 1.5, ctx.currentTime + 0.2);
+  AUDIO.tractionFilter.frequency.linearRampToValueAtTime(400 + speed * 25, ctx.currentTime + 0.2);
+
+  // Brake hiss: gain ramps with brake notch, only above standstill
+  const brake = max(0, -state.notch);
+  const brakeTarget = brake * 0.10 * smoothstep(0.3, 3, speed);
+  AUDIO.brakeNoiseGain.gain.linearRampToValueAtTime(brakeTarget, ctx.currentTime + 0.2);
+
+  // AWS: state-driven (set by physics)
+  if (state.awsBuzzer){
+    AUDIO.awsOsc.frequency.value = 820;
+    AUDIO.awsGain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.05);
+  } else if (state.awsBell){
+    AUDIO.awsOsc.frequency.value = 1200;
+    AUDIO.awsGain.gain.linearRampToValueAtTime(0.10, ctx.currentTime + 0.05);
+  } else {
+    AUDIO.awsGain.gain.linearRampToValueAtTime(0.0, ctx.currentTime + 0.10);
+  }
+
+  // Horn
+  AUDIO.hornGain.gain.linearRampToValueAtTime(state.horn ? 0.30 : 0, ctx.currentTime + 0.04);
+  if (state.hornHigh){
+    AUDIO.hornOsc1.frequency.value = 740;
+    AUDIO.hornOsc2.frequency.value = 494;
+  } else {
+    AUDIO.hornOsc1.frequency.value = 370;
+    AUDIO.hornOsc2.frequency.value = 246;
+  }
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+const GS = {
+  running: false,
+  paused: false,
+  km: 0,                     // position along route
+  v: 0,                      // m/s
+  a: 0,                      // last accel (m/s²)
+  notch: 0,                  // -6..+4   (negative=brake, B6=emergency)
+  horn: false, hornHigh: false,
+  awsBell: false, awsBuzzer: false,
+  awsArmed: false,           // signal triggered AWS, awaiting reset
+  awsTimer: 0,               // count-up; if > 2.7s without reset → emergency brake
+  dsdTimer: 0,               // time since last DSD reset
+  dsdWarn: false,            // visual + audible warning issued
+  doors: 'closed',           // 'closed' | 'opening' | 'open' | 'closing'
+  doorT: 0,
+  stopState: 'enroute',      // 'enroute' | 'stopped' | 'departed'
+  nextStationIdx: 1,
+  serviceTime: 0,            // sim seconds elapsed
+  schedDeparture: ROUTE.schedule[0],
+  score: 0,
+  spadCount: 0,
+  awsFails: 0,
+  stopErrors: [],            // stopping accuracy per station
+  headlights: false,
+  wipers: false,
+  wiperPhase: 0,
+  signalAhead: null,         // SIGNALS entry just ahead
+  nextSignalIdx: 0,
+};
+
+// Pre-sort signals by km
+SIGNALS.sort((a,b)=>a.km-b.km);
+
+// ============================================================
+// INPUT
+// ============================================================
+const KEYS = {};
+window.addEventListener('keydown', e => {
+  KEYS[e.code] = true;
+  // Discrete actions
+  if (!GS.running) return;
+  if (e.code === 'KeyQ') awsReset();
+  if (e.code === 'KeyE') dsdReset();
+  if (e.code === 'KeyL') { GS.headlights = !GS.headlights; cab.ledHead.material.color.setHex(GS.headlights?0x9cffaf:0x222222); }
+  if (e.code === 'KeyV') GS.wipers = !GS.wipers;
+  if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
+  if (e.code === 'Space') { GS.notch = -6; }   // emergency
+  if (e.code === 'KeyH') { GS.horn = true; GS.hornHigh = true; }
+  if (e.code === 'KeyJ') { GS.horn = true; GS.hornHigh = false; }
+  // Notch repeat handled in update via held-down state
+});
+window.addEventListener('keyup', e => {
+  KEYS[e.code] = false;
+  if (e.code === 'KeyH' || e.code === 'KeyJ') GS.horn = false;
+});
+
+let notchHoldTimer = 0;
+function processHeldKeys(dt){
+  notchHoldTimer -= dt;
+  if (notchHoldTimer > 0) return;
+  let moved = false;
+  if (KEYS['ArrowUp']   || KEYS['KeyW']) { GS.notch = clamp(GS.notch + 1, -6, T333.powerNotches-1); moved = true; }
+  if (KEYS['ArrowDown'] || KEYS['KeyS']) { GS.notch = clamp(GS.notch - 1, -6, T333.powerNotches-1); moved = true; }
+  // Brake increase = more negative
+  if (KEYS['ArrowLeft'] || KEYS['KeyA']) { GS.notch = clamp(GS.notch - 1, -6, T333.powerNotches-1); moved = true; }
+  if (KEYS['ArrowRight']|| KEYS['KeyD']) { GS.notch = clamp(GS.notch + 1, -6, T333.powerNotches-1); moved = true; }
+  if (moved) notchHoldTimer = 0.18;
+}
+
+// Touch pad bindings
+function bindPad(id, onDown, onUp){
+  const el = document.getElementById(id);
+  const dn = e=>{ e.preventDefault(); el.classList.add('act'); onDown && onDown(); };
+  const up = e=>{ e.preventDefault(); el.classList.remove('act'); onUp && onUp(); };
+  el.addEventListener('touchstart', dn, {passive:false});
+  el.addEventListener('touchend',   up, {passive:false});
+  el.addEventListener('touchcancel',up, {passive:false});
+  el.addEventListener('mousedown',  dn);
+  el.addEventListener('mouseup',    up);
+  el.addEventListener('mouseleave', up);
+}
+bindPad('tp-pwr-up', ()=>{ GS.notch = clamp(GS.notch+1,-6,T333.powerNotches-1); });
+bindPad('tp-pwr-dn', ()=>{ GS.notch = clamp(GS.notch-1,-6,T333.powerNotches-1); });
+bindPad('tp-brk-up', ()=>{ GS.notch = clamp(GS.notch-1,-6,T333.powerNotches-1); });
+bindPad('tp-brk-dn', ()=>{ GS.notch = clamp(GS.notch+1,-6,T333.powerNotches-1); });
+bindPad('tp-horn',   ()=>{ GS.horn = true; GS.hornHigh = true; }, ()=>{ GS.horn = false; });
+bindPad('tp-aws',    ()=>{ awsReset(); dsdReset(); });
+bindPad('tp-pause',  ()=>{ togglePause(); });
+
+// Detect touch device
+const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+if (isTouch) document.getElementById('touch').style.display = 'block';
+
+// ============================================================
+// AWS / DSD
+// ============================================================
+function awsArm(){
+  GS.awsArmed = true;
+  GS.awsTimer = 0;
+  GS.awsBell = false;
+  GS.awsBuzzer = true;
+  cab.awsMat.map = cab.awsTexW; cab.awsMat.needsUpdate = true;
+  showMsg('AWS WARNING — RESET', 'warn', 1.0);
+}
+function awsReset(){
+  if (GS.awsArmed){
+    GS.awsArmed = false;
+    GS.awsBuzzer = false;
+    GS.awsBell = true;
+    cab.awsMat.map = cab.awsTexN; cab.awsMat.needsUpdate = true;
+    setTimeout(()=>{ GS.awsBell = false; }, 600);
+  }
+}
+function dsdReset(){
+  GS.dsdTimer = 0;
+  GS.dsdWarn = false;
+  cab.ledDsd.material.color.setHex(0x9cffaf);
+  setTimeout(()=>cab.ledDsd.material.color.setHex(0x222222), 250);
+}
+
+// ============================================================
+// SIGNAL LOGIC
+// We give each signal an aspect dynamically:
+//  - The signal protecting a station shows R while "occupied" (we treat this
+//    as: until the train passes the next station departure point).
+//  - Other signals show G; we drop one to Y if the train is approaching a
+//    speed reduction so the player gets a Y warning.
+// ============================================================
+function updateSignals(km){
+  for (const s of SIGNALS){
+    if (s.km < km - 0.05) { setSignalAspect(s, 'G'); continue; }
+    if (s.km > km + 4.0)  { setSignalAspect(s, 'G'); continue; }
+    // Find the next station whose protecting signal corresponds to this signal
+    let aspect = 'G';
+    // Yellow if a sharp speed reduction is imminent
+    const drop = nextLimitDrop(s.km);
+    if (drop && (drop.km - s.km) < 0.6) aspect = 'Y';
+    // Red if a station ahead has stopState 'enroute' and we haven't passed yet
+    const station = ROUTE.stations.find(st => st.km > s.km && st.km - s.km < 0.4);
+    if (station && GS.stopState === 'enroute' && GS.km < station.km - 0.02){
+      aspect = 'R';
+    }
+    setSignalAspect(s, aspect);
+  }
+}
+
+// ============================================================
+// PHYSICS
+// ============================================================
+function physicsStep(dt){
+  // Tractive / brake force from notch
+  const notch = GS.notch;
+  let accel = 0;
+  if (notch > 0){
+    const frac = notch / T333.powerNotches;       // 0..1
+    accel = T333.maxAccel * frac;
+  } else if (notch < 0){
+    const isEmerg = notch === -6;
+    const frac = isEmerg ? 1.0 : (-notch) / (T333.brakeNotches-1);
+    accel = - (isEmerg ? T333.emergBrake : T333.maxBrake) * frac;
+  }
+  // Davis equation rolling/aero resistance (simplified)
+  const v = GS.v;
+  const drag = (T333.davisA + T333.davisB*v + T333.davisC*v*v) * (v>0?1:-1) * 0.20;
+  accel -= drag;
+
+  // Gradient: estimate from y derivative of trackPoint
+  const p0 = trackPoint(GS.km);
+  const p1 = trackPoint(GS.km + 0.01);
+  const grade = (p1.y - p0.y) / (p1.distanceTo(p0));
+  accel -= grade * 9.81;
+
+  // Integrate
+  GS.v += accel * dt;
+  if (GS.v < 0) GS.v = 0;
+  GS.a = accel;
+  const dx = GS.v * dt;          // metres
+  GS.km += dx / KM;
+
+  // Clamp at end of route
+  if (GS.km >= ROUTE.totalKm) GS.km = ROUTE.totalKm;
+}
+
+// ============================================================
+// STATION LOGIC — stop within zone, doors, departure
+// ============================================================
+function updateStations(dt){
+  const ns = ROUTE.stations[GS.nextStationIdx];
+  if (!ns) return;
+  const distM = (ns.km - GS.km) * KM;
+  const speed = GS.v;
+
+  if (GS.stopState === 'enroute'){
+    if (speed < 0.05 && abs(distM) < 60){
+      // Stopped near platform
+      GS.stopState = 'stopped';
+      const err = abs(distM);   // metres past/before platform centre
+      GS.stopErrors.push({ name: ns.name, err });
+      const accuracy = err < 5 ? 'PERFECT' : err < 12 ? 'GOOD' : err < 25 ? 'OK' : 'POOR';
+      const pts = err < 5 ? 200 : err < 12 ? 120 : err < 25 ? 60 : 20;
+      GS.score += pts;
+      // Schedule adherence
+      const sched = ROUTE.schedule[GS.nextStationIdx];
+      const delta = GS.serviceTime - sched;
+      GS.score += clamp(120 - abs(delta), -200, 120);
+      showMsg(`${ns.name.toUpperCase()} — ${accuracy} STOP (${err.toFixed(1)} m, ${delta>=0?'+':''}${delta.toFixed(0)} s)`, err<12?'':'warn', 4.0);
+      GS.doors = 'opening'; GS.doorT = 0;
+      cab.ledDoor.material.color.setHex(0xffaa00);
+    }
+    if (distM < -120 && speed > 1){
+      // Overshot
+      showMsg(`OVERSHOT ${ns.name.toUpperCase()}`, 'bad', 3.0);
+      GS.score -= 120;
+      GS.nextStationIdx++;
+      GS.stopState = 'enroute';
+    }
+  } else if (GS.stopState === 'stopped'){
+    GS.doorT += dt;
+    if (GS.doors === 'opening' && GS.doorT > 1.6){ GS.doors = 'open'; GS.doorT = 0; }
+    if (GS.doors === 'open' && GS.doorT > 35){ GS.doors = 'closing'; GS.doorT = 0;
+      cab.ledDoor.material.color.setHex(0xff5555);
+      showMsg('DOORS CLOSING — RIGHT AWAY', '', 2.0);
+    }
+    if (GS.doors === 'closing' && GS.doorT > 4){ GS.doors = 'closed'; GS.doorT = 0;
+      cab.ledDoor.material.color.setHex(0x222222);
+      GS.stopState = 'departed';
+      showMsg('DOOR INTERLOCK CLEAR — PROCEED', '', 2.0);
+    }
+  } else if (GS.stopState === 'departed'){
+    if (speed > 1.0){
+      GS.nextStationIdx++;
+      GS.stopState = 'enroute';
+      // End of service?
+      if (GS.nextStationIdx >= ROUTE.stations.length){
+        // Already past last? handled below by reaching totalKm
+      }
+    }
+  }
+}
+
+// ============================================================
+// AWS triggering — fire when approaching a non-green signal
+// ============================================================
+let awsLastTrigKm = -1;
+function updateAWSTriggers(){
+  // Find any signal we are about to pass (within 50m), trigger AWS
+  for (const s of SIGNALS){
+    const dKm = s.km - GS.km;
+    if (dKm > 0 && dKm * KM < 50 && Math.abs(s.km - awsLastTrigKm) > 0.05){
+      if (s.aspect === 'R' || s.aspect === 'Y'){
+        awsArm();
+        awsLastTrigKm = s.km;
+      } else {
+        // Bell on green
+        GS.awsBell = true;
+        setTimeout(()=>{ GS.awsBell = false; }, 600);
+        awsLastTrigKm = s.km;
+      }
+    }
+  }
+}
+
+// ============================================================
+// HUD
+// ============================================================
+const elTopNext = document.getElementById('hudNext');
+const elTopClk  = document.getElementById('hudClk');
+const elTopScr  = document.getElementById('hudScr');
+const elMsg     = document.getElementById('msg');
+let msgTimer = 0;
+function showMsg(text, cls, dur){
+  elMsg.textContent = text;
+  elMsg.className = cls || '';
+  elMsg.style.display = 'block';
+  msgTimer = dur || 2.0;
+}
+function updateHUD(dt){
+  msgTimer -= dt; if (msgTimer < 0) elMsg.style.display = 'none';
+  const ns = ROUTE.stations[GS.nextStationIdx];
+  const lim = speedLimitAt(GS.km);
+  const speedMph = (GS.v * MS_TO_MPH).toFixed(0);
+  const overSpeed = (GS.v * MS_TO_MPH) > lim + 2;
+  const distKm = ns ? (ns.km - GS.km).toFixed(2) : '—';
+  elTopNext.textContent = ns ? `NEXT: ${ns.name.toUpperCase()}  ${distKm} km   |  ${speedMph} MPH / ${lim}  ${overSpeed?'⚠':''}` : `END OF SERVICE — ${speedMph} MPH`;
+  elTopClk.textContent  = fmtTime(GS.serviceTime);
+  elTopScr.textContent  = `SCORE: ${GS.score}`;
+}
+
+// ============================================================
+// CAB ANIMATION — needles, lever, wipers, door LED
+// ============================================================
+function updateCabAnim(dt){
+  // Speedo needle: -135deg at 0 to +135deg at 100 mph (270deg sweep)
+  const mph = GS.v * MS_TO_MPH;
+  const tSpd = clamp(mph / 100, 0, 1);
+  const angSpd = (-PI*0.75) + tSpd * (PI*1.5);
+  cab.speedoNeedle.rotation.set(-PI*0.45, 0, -angSpd - PI/2);
+  cab.speedoNeedle.position.set(-0.45, 1.275, -1.045);
+
+  // Pressure gauge: brake-cylinder pressure proxy — rises with brake notch
+  const pBar = clamp((GS.notch < 0 ? -GS.notch : 0) / 5 * 5, 0, 5);  // 0..5 bar
+  const tP = pBar / 8;
+  const angP = (-PI*0.75) + tP * (PI*1.5);
+  cab.pressNeedle.rotation.set(-PI*0.45, 0, -angP - PI/2);
+  cab.pressNeedle.position.set(0.45, 1.275, -1.045);
+
+  // Master controller lever — tilt forward/back
+  const ln = GS.notch / 6;        // -1..+0.66
+  cab.lever.rotation.x = -ln * 0.5;
+
+  // Wipers
+  if (GS.wipers){
+    GS.wiperPhase += dt * 4;
+    const a = sin(GS.wiperPhase) * 1.2;
+    cab.wL.rotation.y = a;
+    cab.wR.rotation.y = a + 0.05;
+  }
+}
+
+// ============================================================
+// MAIN LOOP
+// ============================================================
+const clock = new THREE.Clock();
+const camRig = new THREE.Object3D();
+scene.add(camRig);
+camRig.add(camera);
+// camera sits at driver's eye position relative to rig
+camera.position.set(0, 1.85, 0.30);
+
+// Mouse / touch look (small free-look)
+let lookYaw = 0, lookPitch = 0;
+canvas.addEventListener('pointermove', e=>{
+  if (!GS.running) return;
+  if (e.buttons === 1 || e.pointerType === 'touch'){
+    lookYaw   -= e.movementX * 0.002;
+    lookPitch -= e.movementY * 0.002;
+    lookYaw   = clamp(lookYaw, -0.8, 0.8);
+    lookPitch = clamp(lookPitch, -0.4, 0.4);
+  }
+});
+
+function placeCamera(){
+  const f = trackFrame(GS.km);
+  camRig.position.copy(f.p);
+  // Rig orientation: -Z axis aligned with tangent so the camera (which looks down -Z by default)
+  // looks forward along the track. lookAt uses (0,1,0) up by default.
+  camRig.lookAt(f.p.clone().add(f.t));
+  // Camera local rotation (player look) layered on top
+  camera.rotation.set(lookPitch, lookYaw, 0);
+  // Cab follows the rig directly. Cab geometry was built with -Z = forward (windscreen),
+  // matching camera convention, so a direct copy is correct.
+  cabGroup.position.copy(camRig.position);
+  cabGroup.quaternion.copy(camRig.quaternion);
+  // Sky tracks camera world position (so we never leave the dome) but keeps world rotation
+  camera.getWorldPosition(skyMesh.position);
+}
+
+function endOfRoute(){
+  if (GS.nextStationIdx >= ROUTE.stations.length || GS.km >= ROUTE.totalKm - 0.05){
+    if (GS.v < 0.2){
+      // Final stop at Skipton
+      const last = ROUTE.stations[ROUTE.stations.length - 1];
+      const distM = abs((last.km - GS.km) * KM);
+      if (!GS._endShown){
+        GS._endShown = true;
+        const final = floor(GS.score);
+        showMsg(`SERVICE COMPLETE — SKIPTON. FINAL SCORE: ${final}`, '', 8.0);
+      }
+    }
+  }
+}
+
+function loop(){
+  const dt = min(clock.getDelta(), 0.05);
+  if (GS.running && !GS.paused){
+    GS.serviceTime += dt;
+
+    processHeldKeys(dt);
+    physicsStep(dt);
+    updateStations(dt);
+    updateSignals(GS.km);
+    updateAWSTriggers();
+
+    // AWS escalation: not reset within window → emergency brake
+    if (GS.awsArmed){
+      GS.awsTimer += dt;
+      if (GS.awsTimer > 2.7){
+        GS.notch = -6;
+        GS.awsFails++;
+        showMsg('AWS NOT ACKNOWLEDGED — EMERGENCY BRAKE', 'bad', 4.0);
+        GS.score -= 80;
+        // Reset AWS armed once brake applied (still buzzer until manual reset of cause)
+        GS.awsArmed = false;
+        GS.awsBuzzer = false;
+        cab.awsMat.map = cab.awsTexN; cab.awsMat.needsUpdate = true;
+      }
+    }
+    // DSD timer
+    GS.dsdTimer += dt;
+    if (GS.dsdTimer > 60 && !GS.dsdWarn){
+      GS.dsdWarn = true;
+      cab.ledDsd.material.color.setHex(0xffaa00);
+      showMsg('DSD WARNING — PRESS E', 'warn', 2.5);
+    }
+    if (GS.dsdTimer > 65){
+      GS.notch = -6;
+      cab.ledDsd.material.color.setHex(0xff4444);
+      showMsg('DSD ACTIVATED — EMERGENCY BRAKE', 'bad', 4.0);
+      GS.score -= 100;
+      GS.dsdTimer = 0; GS.dsdWarn = false;
+    }
+
+    placeCamera();
+    updateCabAnim(dt);
+    updateHUD(dt);
+    audioTick({
+      v: GS.v, notch: GS.notch,
+      awsBell: GS.awsBell, awsBuzzer: GS.awsBuzzer,
+      horn: GS.horn, hornHigh: GS.hornHigh,
+    }, dt);
+
+    endOfRoute();
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+// ============================================================
+// MENU + RESIZE + PAUSE
+// ============================================================
+function resize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+function buildMenuList(){
+  const el = document.getElementById('stationList');
+  el.innerHTML = ROUTE.stations.map((s,i)=>{
+    const t = ROUTE.schedule[i] - ROUTE.schedule[0];
+    return `<div class="row"><div>${s.name} <span style="color:#7090a8">(${s.code})</span></div><div class="km">${s.km.toFixed(2)} km · ${fmtTime(t)}</div></div>`;
+  }).join('');
+}
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  initAudio();
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('hud').style.display = 'block';
+  GS.running = true;
+  GS.km = 0; GS.v = 0; GS.notch = 0; GS.score = 0;
+  GS.serviceTime = 0; GS.nextStationIdx = 1;
+  GS.stopState = 'departed';     // we depart Leeds
+  showMsg('RIGHT AWAY — SIGNAL OFF — PROCEED', '', 3.0);
+});
+document.getElementById('resumeBtn').addEventListener('click', togglePause);
+document.getElementById('quitBtn').addEventListener('click', ()=>{
+  GS.running = false; GS.paused = false;
+  document.getElementById('pause').style.display = 'none';
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('menu').style.display = 'flex';
+});
+
+function togglePause(){
+  if (!GS.running) return;
+  GS.paused = !GS.paused;
+  document.getElementById('pause').style.display = GS.paused ? 'flex' : 'none';
+}
+
+// Expose module-scope state for browser-console debugging.
+window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD };
+
+// Boot
+buildMenuList();
+document.getElementById('loading').style.display = 'none';
+document.getElementById('menu').style.display = 'flex';
+loop();
+
+</script>
+
+</body>
+</html>
