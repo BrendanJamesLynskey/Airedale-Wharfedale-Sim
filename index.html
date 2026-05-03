@@ -183,8 +183,8 @@ const T333 = {
   maxAccel: 0.85,                    // m/s² nominal
   maxBrake: 1.10,                    // m/s² service
   emergBrake: 1.40,                  // m/s² emergency
-  powerNotches: 5,                   // 0..4
-  brakeNotches: 7,                   // 0..6 (6 = emergency)
+  powerNotches: 5,                   // 0 (OFF) + 4 (P1..P4)
+  brakeNotches: 6,                   // 0 (OFF) + 5 (B1..B5) + EB at -6
   davisA: 1.20,  davisB: 0.012,  davisC: 0.00018,  // simplified rolling/aero
 };
 
@@ -263,16 +263,21 @@ function nextStation(km){
 // ============================================================
 const canvas = document.getElementById('gc');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference:'high-performance' });
-renderer.setPixelRatio(min(window.devicePixelRatio || 1, 2));
+// Quality tier — auto-detect mobile to keep frame rate high there, but use high pixel ratio on desktop.
+const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '') || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+const QUALITY = isMobile ? 'mobile' : 'desktop';
+const PIXEL_RATIO = QUALITY === 'mobile' ? min(window.devicePixelRatio || 1, 2) : min(window.devicePixelRatio || 1, 3);
+renderer.setPixelRatio(PIXEL_RATIO);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
-renderer.shadowMap.enabled = false;   // soft shadows are expensive on mobile; rely on AO/baked
+renderer.shadowMap.enabled = false;   // soft shadows are pricey, especially on integrated GPUs
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xb8c8d8, 400, 2200);
+// Pull fog further out so distant scenery doesn't haze too aggressively
+scene.fog = new THREE.Fog(0xb8c8d8, 600, 3200);
 
-const camera = new THREE.PerspectiveCamera(62, 1, 0.5, 4000);
+const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 5000);
 camera.position.set(0, 3.0, 0);
 
 // Sun + sky lighting
@@ -355,48 +360,57 @@ function vnoise(x,y){
 }
 function fbm(x,y,oct){let s=0,a=0.5,f=1;for(let i=0;i<oct;i++){s+=a*vnoise(x*f,y*f);f*=2;a*=0.5;}return s;}
 
-const texGrass = noiseTexture(256, (u,v)=>{
-  const n = fbm(u*8, v*8, 4);
-  const m = fbm(u*32+10, v*32+10, 3);
-  const r = 70 + n*60 + m*15;
-  const g = 95 + n*70 + m*20;
-  const b = 50 + n*30 + m*10;
+// Higher-resolution procedural textures on desktop quality tier
+const TEX_SIZE = QUALITY === 'desktop' ? 512 : 256;
+const texGrass = noiseTexture(TEX_SIZE, (u,v)=>{
+  const n = fbm(u*8, v*8, 5);
+  const m = fbm(u*32+10, v*32+10, 4);
+  const fine = fbm(u*128+5, v*128+5, 2);
+  const r = 65 + n*55 + m*15 + fine*10;
+  const g = 95 + n*75 + m*22 + fine*12;
+  const b = 45 + n*28 + m*10;
   return [r|0, g|0, b|0];
 });
-texGrass.repeat.set(120, 120);
+texGrass.repeat.set(200, 200);
+texGrass.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-const texBallast = noiseTexture(256, (u,v)=>{
-  const n = fbm(u*22, v*22, 5);
-  const e = (n - 0.5) * 90 + 95;
-  return [e|0, e|0, (e-5)|0];
+const texBallast = noiseTexture(TEX_SIZE, (u,v)=>{
+  const n = fbm(u*22, v*22, 6);
+  const stones = fbm(u*60+3, v*60+3, 3);
+  const e = (n - 0.5) * 95 + 95 + stones*15;
+  return [e|0, (e-2)|0, (e-8)|0];
 });
-texBallast.repeat.set(60, 600);
+texBallast.repeat.set(80, 800);
+texBallast.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-const texSleeper = noiseTexture(128, (u,v)=>{
-  const n = fbm(u*12, v*4, 3) * 30;
-  return [(70+n)|0, (55+n)|0, (40+n)|0];
+const texSleeper = noiseTexture(TEX_SIZE/2, (u,v)=>{
+  const n = fbm(u*12, v*4, 4) * 30;
+  const grain = fbm(u*80, v*20, 2) * 12;
+  return [(72+n+grain)|0, (55+n+grain*0.7)|0, (38+n+grain*0.4)|0];
 });
-texSleeper.repeat.set(1, 600);
+texSleeper.repeat.set(1, 800);
+texSleeper.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-const texBrick = noiseTexture(256, (u,v)=>{
+const texBrick = noiseTexture(TEX_SIZE, (u,v)=>{
   const row = floor(v*16);
   const off = (row%2)*0.5;
   const ux = (u+off)%1;
   const cx = floor(ux*8), cy = row;
   const mort = (abs((u+off)*8 - cx - 0.5) > 0.42) || (abs(v*16 - row - 0.5) > 0.40);
   const n = fbm(u*40, v*40, 3);
-  if (mort) return [180,170,160];
+  if (mort) return [185,175,160];
   const r = 130 + n*40 + (hash(cx,cy))*25;
   const g = 60 + n*20;
   const b = 50 + n*15;
   return [r|0,g|0,b|0];
 });
 texBrick.repeat.set(8, 4);
+texBrick.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-const texConcrete = noiseTexture(256, (u,v)=>{
-  const n = fbm(u*10, v*10, 4)*40 + fbm(u*60,v*60,2)*15;
-  const e = 150 + n;
-  return [e|0, (e-3)|0, (e-8)|0];
+const texConcrete = noiseTexture(TEX_SIZE, (u,v)=>{
+  const n = fbm(u*10, v*10, 5)*40 + fbm(u*60,v*60,2)*15 + fbm(u*200,v*200,1)*8;
+  const e = 152 + n;
+  return [e|0, (e-3)|0, (e-9)|0];
 });
 
 const texTarmac = noiseTexture(256, (u,v)=>{
@@ -817,7 +831,7 @@ function buildScatter(){
   const treeMat = new THREE.MeshBasicMaterial({ map: treeTex, transparent: true, alphaTest: 0.45, side: THREE.DoubleSide });
   const treeGeo = new THREE.PlaneGeometry(8, 12);
 
-  const treeCount = 1800;
+  const treeCount = QUALITY === 'desktop' ? 4500 : 1500;
   const trees = new THREE.InstancedMesh(treeGeo, treeMat, treeCount);
   const tmp = new THREE.Object3D();
   for (let i = 0; i < treeCount; i++){
@@ -839,7 +853,7 @@ function buildScatter(){
   // BUILDINGS — boxes with brick texture, scattered further out, denser around stations
   const bldGeo = new THREE.BoxGeometry(1,1,1);
   const bldMat = new THREE.MeshStandardMaterial({ map: texBrick, roughness: 0.95 });
-  const bldCount = 700;
+  const bldCount = QUALITY === 'desktop' ? 1600 : 600;
   const buildings = new THREE.InstancedMesh(bldGeo, bldMat, bldCount);
   for (let i = 0; i < bldCount; i++){
     // Bias toward stations
@@ -1067,46 +1081,56 @@ const cab = (function buildCab(){
   pressNeedle.position.set(0.45, 1.275, -1.045);
   g.add(pressNeedle);
 
-  // Master controller (centre, combined power/brake)
+  // Master controller (centre, combined power/brake) — bigger, more prominent
   const mcBase = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, 0.10, 0.6),
+    new THREE.BoxGeometry(0.85, 0.12, 0.42),
     new THREE.MeshStandardMaterial({ color: 0x16181a, roughness:0.6 })
   );
-  mcBase.position.set(0, 1.10, -1.05);
+  mcBase.position.set(0, 1.10, -0.95);
   g.add(mcBase);
   // Notch labels strip
   const notchTex = (()=> {
-    const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 192;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#0a0c0e'; ctx.fillRect(0,0,512,96);
-    ctx.strokeStyle = '#5cc8ff'; ctx.lineWidth = 2;
-    ctx.strokeRect(2,2,508,92);
-    const labels = ['EB','B6','B5','B4','B3','B2','B1','OFF','P1','P2','P3','P4'];
-    ctx.font = 'bold 18px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = '#0a0c0e'; ctx.fillRect(0,0,1024,192);
+    ctx.strokeStyle = '#5cc8ff'; ctx.lineWidth = 3;
+    ctx.strokeRect(3,3,1018,186);
+    const labels = ['EB','B5','B4','B3','B2','B1','OFF','P1','P2','P3','P4'];
+    ctx.font = 'bold 44px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
     labels.forEach((l,i)=>{
-      const x = 22 + i * (468/(labels.length-1));
+      const x = 50 + i * (924/(labels.length-1));
       ctx.fillStyle = (l==='OFF') ? '#9ccfff' : (l[0]==='B'||l==='EB') ? '#ffaa66' : '#9cffaf';
-      ctx.fillText(l, x, 48);
+      ctx.fillText(l, x, 96);
+      // tick mark
+      ctx.strokeStyle = 'rgba(140,170,200,0.6)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, 152); ctx.lineTo(x, 178); ctx.stroke();
     });
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
   const notchStrip = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.46, 0.07),
+    new THREE.PlaneGeometry(0.80, 0.15),
     new THREE.MeshBasicMaterial({ map: notchTex })
   );
   notchStrip.rotation.x = -PI/2;
-  notchStrip.position.set(0, 1.155, -1.05);
+  notchStrip.position.set(0, 1.165, -0.95);
   g.add(notchStrip);
-  // Lever
+  // Current-notch indicator dot — moves along the strip with notch
+  const notchDot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.025, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xff5c5c })
+  );
+  notchDot.position.set(0, 1.20, -0.95);
+  g.add(notchDot);
+  // Lever — bigger, more visible
   const leverMat = new THREE.MeshStandardMaterial({ color: 0xc02828, metalness:0.4, roughness:0.4 });
   const lever = new THREE.Group();
-  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.30, 12), leverMat);
-  stick.position.y = 0.15;
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.030, 0.42, 12), leverMat);
+  stick.position.y = 0.21;
   lever.add(stick);
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), leverMat);
-  knob.position.y = 0.32;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 12), leverMat);
+  knob.position.y = 0.45;
   lever.add(knob);
-  lever.position.set(0, 1.16, -1.05);
+  lever.position.set(0, 1.17, -0.95);
   g.add(lever);
 
   // Horn lever (left side)
@@ -1163,7 +1187,7 @@ const cab = (function buildCab(){
   return {
     group: g,
     speedoNeedle, pressNeedle,
-    lever,
+    lever, notchDot,
     awsMat, awsTexN, awsTexW,
     ledHead, ledDoor, ledDsd,
     wL, wR,
@@ -1316,21 +1340,36 @@ SIGNALS.sort((a,b)=>a.km-b.km);
 
 // ============================================================
 // INPUT
+// Notch changes fire IMMEDIATELY on keydown (so taps work) and repeat on hold
+// after a delay, mimicking OS key-repeat but at a sane rate.
 // ============================================================
 const KEYS = {};
+const NOTCH_KEYS = {
+  'ArrowUp': +1, 'KeyW': +1,         // power up / brake decrease
+  'ArrowRight': +1, 'KeyD': +1,
+  'ArrowDown': -1, 'KeyS': -1,       // power down / brake increase
+  'ArrowLeft': -1, 'KeyA': -1,
+};
+function bumpNotch(delta){
+  GS.notch = clamp(GS.notch + delta, -6, T333.powerNotches - 1);
+  flashLever();
+}
+let leverFlashT = 0;
+function flashLever(){ leverFlashT = 0.25; }   // brief highlight on lever change
+
 window.addEventListener('keydown', e => {
+  if (e.repeat) return;            // we manage repeat ourselves
   KEYS[e.code] = true;
-  // Discrete actions
   if (!GS.running) return;
+  if (e.code in NOTCH_KEYS) { bumpNotch(NOTCH_KEYS[e.code]); notchHoldTimer = 0.30; }
   if (e.code === 'KeyQ') awsReset();
   if (e.code === 'KeyE') dsdReset();
   if (e.code === 'KeyL') { GS.headlights = !GS.headlights; cab.ledHead.material.color.setHex(GS.headlights?0x9cffaf:0x222222); }
   if (e.code === 'KeyV') GS.wipers = !GS.wipers;
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
-  if (e.code === 'Space') { GS.notch = -6; }   // emergency
+  if (e.code === 'Space') { GS.notch = -6; flashLever(); }
   if (e.code === 'KeyH') { GS.horn = true; GS.hornHigh = true; }
   if (e.code === 'KeyJ') { GS.horn = true; GS.hornHigh = false; }
-  // Notch repeat handled in update via held-down state
 });
 window.addEventListener('keyup', e => {
   KEYS[e.code] = false;
@@ -1341,13 +1380,12 @@ let notchHoldTimer = 0;
 function processHeldKeys(dt){
   notchHoldTimer -= dt;
   if (notchHoldTimer > 0) return;
-  let moved = false;
-  if (KEYS['ArrowUp']   || KEYS['KeyW']) { GS.notch = clamp(GS.notch + 1, -6, T333.powerNotches-1); moved = true; }
-  if (KEYS['ArrowDown'] || KEYS['KeyS']) { GS.notch = clamp(GS.notch - 1, -6, T333.powerNotches-1); moved = true; }
-  // Brake increase = more negative
-  if (KEYS['ArrowLeft'] || KEYS['KeyA']) { GS.notch = clamp(GS.notch - 1, -6, T333.powerNotches-1); moved = true; }
-  if (KEYS['ArrowRight']|| KEYS['KeyD']) { GS.notch = clamp(GS.notch + 1, -6, T333.powerNotches-1); moved = true; }
-  if (moved) notchHoldTimer = 0.18;
+  let delta = 0;
+  for (const k in NOTCH_KEYS) if (KEYS[k]) delta += NOTCH_KEYS[k];
+  if (delta) {
+    bumpNotch(Math.sign(delta));     // one notch per repeat tick
+    notchHoldTimer = 0.30;           // 0.30s between repeats while held
+  }
 }
 
 // Touch pad bindings
@@ -1362,10 +1400,10 @@ function bindPad(id, onDown, onUp){
   el.addEventListener('mouseup',    up);
   el.addEventListener('mouseleave', up);
 }
-bindPad('tp-pwr-up', ()=>{ GS.notch = clamp(GS.notch+1,-6,T333.powerNotches-1); });
-bindPad('tp-pwr-dn', ()=>{ GS.notch = clamp(GS.notch-1,-6,T333.powerNotches-1); });
-bindPad('tp-brk-up', ()=>{ GS.notch = clamp(GS.notch-1,-6,T333.powerNotches-1); });
-bindPad('tp-brk-dn', ()=>{ GS.notch = clamp(GS.notch+1,-6,T333.powerNotches-1); });
+bindPad('tp-pwr-up', ()=>bumpNotch(+1));
+bindPad('tp-pwr-dn', ()=>bumpNotch(-1));
+bindPad('tp-brk-up', ()=>bumpNotch(-1));
+bindPad('tp-brk-dn', ()=>bumpNotch(+1));
 bindPad('tp-horn',   ()=>{ GS.horn = true; GS.hornHigh = true; }, ()=>{ GS.horn = false; });
 bindPad('tp-aws',    ()=>{ awsReset(); dsdReset(); });
 bindPad('tp-pause',  ()=>{ togglePause(); });
@@ -1439,13 +1477,15 @@ function physicsStep(dt){
     accel = T333.maxAccel * frac;
   } else if (notch < 0){
     const isEmerg = notch === -6;
-    const frac = isEmerg ? 1.0 : (-notch) / (T333.brakeNotches-1);
+    const frac = isEmerg ? 1.0 : (-notch) / 5;     // B1..B5 → 0.2..1.0
     accel = - (isEmerg ? T333.emergBrake : T333.maxBrake) * frac;
   }
-  // Davis equation rolling/aero resistance (simplified)
+  // Davis equation rolling/aero resistance (simplified). Always opposes motion; zero at standstill.
   const v = GS.v;
-  const drag = (T333.davisA + T333.davisB*v + T333.davisC*v*v) * (v>0?1:-1) * 0.20;
-  accel -= drag;
+  if (v > 0.05) {
+    const drag = (T333.davisA + T333.davisB*v + T333.davisC*v*v) * 0.20;
+    accel -= drag;
+  }
 
   // Gradient: estimate from y derivative of trackPoint
   const p0 = trackPoint(GS.km);
@@ -1557,6 +1597,12 @@ function showMsg(text, cls, dur){
   elMsg.style.display = 'block';
   msgTimer = dur || 2.0;
 }
+function notchLabel(n){
+  if (n === -6) return 'EB';
+  if (n < 0)    return 'B' + (-n);
+  if (n === 0)  return 'OFF';
+  return 'P' + n;
+}
 function updateHUD(dt){
   msgTimer -= dt; if (msgTimer < 0) elMsg.style.display = 'none';
   const ns = ROUTE.stations[GS.nextStationIdx];
@@ -1565,7 +1611,7 @@ function updateHUD(dt){
   const overSpeed = (GS.v * MS_TO_MPH) > lim + 2;
   const distKm = ns ? (ns.km - GS.km).toFixed(2) : '—';
   elTopNext.textContent = ns ? `NEXT: ${ns.name.toUpperCase()}  ${distKm} km   |  ${speedMph} MPH / ${lim}  ${overSpeed?'⚠':''}` : `END OF SERVICE — ${speedMph} MPH`;
-  elTopClk.textContent  = fmtTime(GS.serviceTime);
+  elTopClk.textContent  = `${notchLabel(GS.notch)}  ${fmtTime(GS.serviceTime)}`;
   elTopScr.textContent  = `SCORE: ${GS.score}`;
 }
 
@@ -1587,9 +1633,21 @@ function updateCabAnim(dt){
   cab.pressNeedle.rotation.set(-PI*0.45, 0, -angP - PI/2);
   cab.pressNeedle.position.set(0.45, 1.275, -1.045);
 
-  // Master controller lever — tilt forward/back
+  // Master controller lever — tilt forward/back, plus brief colour flash on change
   const ln = GS.notch / 6;        // -1..+0.66
   cab.lever.rotation.x = -ln * 0.5;
+  // Notch indicator dot slides along the strip. 11 positions (EB,B5..B1,OFF,P1..P4).
+  // Notch -6 → 0 (EB), -5..-1 → 1..5 (B5..B1), 0 → 6 (OFF), 1..4 → 7..10 (P1..P4).
+  const idx = GS.notch + 6;
+  const xPos = (idx / 10) * 0.80 - 0.40;
+  cab.notchDot.position.x = clamp(xPos, -0.40, 0.40);
+  if (leverFlashT > 0){
+    leverFlashT -= dt;
+    cab.lever.children.forEach(m => m.material.emissive && m.material.emissive.setHex(0x886600));
+    cab.lever.children.forEach(m => m.material.emissiveIntensity = clamp(leverFlashT * 4, 0, 1));
+  } else {
+    cab.lever.children.forEach(m => m.material.emissive && m.material.emissive.setHex(0x000000));
+  }
 
   // Wipers
   if (GS.wipers){
