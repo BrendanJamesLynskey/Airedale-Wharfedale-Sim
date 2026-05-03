@@ -270,8 +270,11 @@ const PIXEL_RATIO = QUALITY === 'mobile' ? min(window.devicePixelRatio || 1, 2) 
 renderer.setPixelRatio(PIXEL_RATIO);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = false;   // soft shadows are pricey, especially on integrated GPUs
+// Defensive clear colour — if a shader fails on a particular GPU and the sky isn't drawn, the
+// background reads as a sky blue instead of a confusing white default.
+renderer.setClearColor(0x9bc1de, 1.0);
 
 const scene = new THREE.Scene();
 // Fog colour matches the sky's horizon haze so terrain blends smoothly into the sky in the distance.
@@ -292,16 +295,17 @@ scene.add(ambient);
 // Sky gradient via a large inverted sphere. Made to follow the camera (added as a child of the camera below)
 // and the shader uses the LOCAL position as a direction vector so it is independent of camera world position.
 function buildSky(){
-  const g = new THREE.SphereGeometry(800, 32, 16);
+  // Plain three-stop blue gradient — no procedural clouds, no high-exponent sun glow that could
+  // overflow on some GPUs. Background mesh, rendered behind everything.
+  const g = new THREE.SphereGeometry(900, 32, 16);
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide,
-    depthWrite: false,
     uniforms: {
-      top:    { value: new THREE.Color(0x4d8bc8) },   // deep sky blue
-      mid:    { value: new THREE.Color(0x9bc1de) },   // mid-air blue
-      horizon:{ value: new THREE.Color(0xc8d8e6) },   // hazy bluish-white at horizon
-      bottom: { value: new THREE.Color(0x6a92b8) },   // muted blue-grey below horizon
-      sunDir: { value: sun.position.clone().normalize() },
+      top:     { value: new THREE.Color(0x4d8bc8) },
+      mid:     { value: new THREE.Color(0x9bc1de) },
+      horizon: { value: new THREE.Color(0xc8d8e6) },
+      bottom:  { value: new THREE.Color(0x7a9fc0) },
+      sunDir:  { value: sun.position.clone().normalize() },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -313,34 +317,16 @@ function buildSky(){
     fragmentShader: `
       varying vec3 vDir;
       uniform vec3 top, mid, horizon, bottom, sunDir;
-      // Hash-noise for soft cloud bands
-      float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-      float noise(vec3 p){
-        vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-        float n = mix(mix(mix(hash(i+vec3(0,0,0)), hash(i+vec3(1,0,0)), f.x),
-                          mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
-                      mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x),
-                          mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
-        return n;
-      }
       void main(){
-        float h = vDir.y;
+        float h = clamp(vDir.y, -1.0, 1.0);
         vec3 c;
-        // Three-stop gradient: top → mid → horizon, then horizon → bottom below
-        if (h > 0.35)       c = mix(mid, top, smoothstep(0.35, 0.95, h));
-        else if (h > 0.0)   c = mix(horizon, mid, smoothstep(0.0, 0.35, h));
-        else                c = mix(horizon, bottom, smoothstep(0.0, -0.35, h));
-        // Soft cumulus clouds — only above horizon
-        if (h > 0.05) {
-          float cloud = noise(vDir * 6.0) * 0.6 + noise(vDir * 18.0) * 0.4;
-          cloud = smoothstep(0.55, 0.85, cloud) * smoothstep(0.05, 0.30, h);
-          c = mix(c, vec3(1.0, 1.0, 1.0), cloud * 0.7);
-        }
-        // Sun disc + glow
-        float s = max(dot(vDir, normalize(sunDir)), 0.0);
-        c += vec3(1.0, 0.9, 0.7)   * pow(s, 14.0)  * 0.35;
-        c += vec3(1.0, 0.95, 0.85) * pow(s, 800.0) * 5.0;   // bright sun
-        gl_FragColor = vec4(c, 1.0);
+        if (h > 0.35)        c = mix(mid, top, smoothstep(0.35, 0.95, h));
+        else if (h > 0.0)    c = mix(horizon, mid, smoothstep(0.0, 0.35, h));
+        else                 c = mix(horizon, bottom, smoothstep(0.0, -0.4, h));
+        // Soft sun glow — bounded so it cannot brighten the whole sky
+        float s = clamp(dot(vDir, normalize(sunDir)), 0.0, 1.0);
+        c += vec3(1.0, 0.9, 0.75) * pow(s, 32.0) * 0.25;
+        gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
       }
     `,
   });
@@ -349,6 +335,8 @@ function buildSky(){
 const skyMesh = buildSky();
 // Sky stays in scene (so its rotation is fixed in world space and the sun glow points correctly),
 // but its position tracks the camera world position so the camera never leaves the sphere.
+// renderOrder -1 forces it to draw before everything else so other geometry is layered correctly.
+skyMesh.renderOrder = -1;
 scene.add(skyMesh);
 
 // ============================================================
@@ -1103,10 +1091,11 @@ function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowF
   );
   hub.position.y = 0.018;
   grp.add(hub);
-  // Glass cover (faintly tinted, slightly above face)
+  // Faint glass tint above the face — plain transparent material (no MeshPhysicalMaterial.transmission,
+  // which requires multi-pass rendering that some GPUs/browsers fall back to white on).
   const glass = new THREE.Mesh(
     new THREE.CircleGeometry(radius * 1.0, 32),
-    new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.0, transmission: 0.8 })
+    new THREE.MeshBasicMaterial({ color: 0xeef4f8, transparent: true, opacity: 0.08, depthWrite: false })
   );
   glass.rotation.x = -PI/2;
   glass.position.y = 0.025;
