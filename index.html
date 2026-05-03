@@ -274,8 +274,8 @@ renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = false;   // soft shadows are pricey, especially on integrated GPUs
 
 const scene = new THREE.Scene();
-// Pull fog further out so distant scenery doesn't haze too aggressively
-scene.fog = new THREE.Fog(0xb8c8d8, 600, 3200);
+// Fog colour matches the sky's horizon haze so terrain blends smoothly into the sky in the distance.
+scene.fog = new THREE.Fog(0xc8d8e6, 600, 3200);
 
 const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 5000);
 camera.position.set(0, 3.0, 0);
@@ -297,9 +297,10 @@ function buildSky(){
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
-      top:    { value: new THREE.Color(0x6ea7d6) },
-      mid:    { value: new THREE.Color(0xb6cee0) },
-      bottom: { value: new THREE.Color(0xd9d2c2) },
+      top:    { value: new THREE.Color(0x4d8bc8) },   // deep sky blue
+      mid:    { value: new THREE.Color(0x9bc1de) },   // mid-air blue
+      horizon:{ value: new THREE.Color(0xc8d8e6) },   // hazy bluish-white at horizon
+      bottom: { value: new THREE.Color(0x6a92b8) },   // muted blue-grey below horizon
       sunDir: { value: sun.position.clone().normalize() },
     },
     vertexShader: `
@@ -311,16 +312,34 @@ function buildSky(){
     `,
     fragmentShader: `
       varying vec3 vDir;
-      uniform vec3 top, mid, bottom, sunDir;
+      uniform vec3 top, mid, horizon, bottom, sunDir;
+      // Hash-noise for soft cloud bands
+      float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float noise(vec3 p){
+        vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        float n = mix(mix(mix(hash(i+vec3(0,0,0)), hash(i+vec3(1,0,0)), f.x),
+                          mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
+                      mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x),
+                          mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
+        return n;
+      }
       void main(){
-        float h = clamp(vDir.y, -0.2, 1.0);
+        float h = vDir.y;
         vec3 c;
-        if (h > 0.0) c = mix(mid, top, smoothstep(0.0, 0.7, h));
-        else         c = mix(mid, bottom, smoothstep(0.0, -0.2, h));
-        // Soft sun glow
+        // Three-stop gradient: top → mid → horizon, then horizon → bottom below
+        if (h > 0.35)       c = mix(mid, top, smoothstep(0.35, 0.95, h));
+        else if (h > 0.0)   c = mix(horizon, mid, smoothstep(0.0, 0.35, h));
+        else                c = mix(horizon, bottom, smoothstep(0.0, -0.35, h));
+        // Soft cumulus clouds — only above horizon
+        if (h > 0.05) {
+          float cloud = noise(vDir * 6.0) * 0.6 + noise(vDir * 18.0) * 0.4;
+          cloud = smoothstep(0.55, 0.85, cloud) * smoothstep(0.05, 0.30, h);
+          c = mix(c, vec3(1.0, 1.0, 1.0), cloud * 0.7);
+        }
+        // Sun disc + glow
         float s = max(dot(vDir, normalize(sunDir)), 0.0);
-        c += vec3(1.0, 0.85, 0.6) * pow(s, 12.0) * 0.4;
-        c += vec3(1.0, 0.9, 0.7)  * pow(s, 256.0) * 1.2;
+        c += vec3(1.0, 0.9, 0.7)   * pow(s, 14.0)  * 0.35;
+        c += vec3(1.0, 0.95, 0.85) * pow(s, 800.0) * 5.0;   // bright sun
         gl_FragColor = vec4(c, 1.0);
       }
     `,
@@ -362,13 +381,26 @@ function fbm(x,y,oct){let s=0,a=0.5,f=1;for(let i=0;i<oct;i++){s+=a*vnoise(x*f,y
 
 // Higher-resolution procedural textures on desktop quality tier
 const TEX_SIZE = QUALITY === 'desktop' ? 512 : 256;
+// Grass texture: mix of greens with brown/yellow patches, low saturation, like Yorkshire fields.
 const texGrass = noiseTexture(TEX_SIZE, (u,v)=>{
-  const n = fbm(u*8, v*8, 5);
-  const m = fbm(u*32+10, v*32+10, 4);
-  const fine = fbm(u*128+5, v*128+5, 2);
-  const r = 65 + n*55 + m*15 + fine*10;
-  const g = 95 + n*75 + m*22 + fine*12;
-  const b = 45 + n*28 + m*10;
+  const n    = fbm(u*8,    v*8,    5);
+  const m    = fbm(u*32+10,v*32+10,4);
+  const fine = fbm(u*128+5,v*128+5,2);
+  const patch= fbm(u*3+1,  v*3+1,  3);   // large-scale dry/wet patches
+  // Base palette: olive-green
+  let r = 80 + n*45 + fine*8;
+  let g = 95 + n*55 + fine*10;
+  let b = 55 + n*30 + fine*6;
+  // Mix in dry-grass colour where patch noise is low
+  const dry = smoothstep(0.30, 0.55, patch);   // 0 = dry, 1 = lush
+  r = lerp(140 + m*20, r, dry);    // dry: yellow-brown
+  g = lerp(125 + m*18, g, dry);
+  b = lerp( 70 + m*10, b, dry);
+  // Subtle dark patches where shaded
+  const shade = smoothstep(0.20, 0.55, fbm(u*10+3, v*10+3, 3));
+  r *= 0.75 + 0.25*shade;
+  g *= 0.78 + 0.22*shade;
+  b *= 0.75 + 0.25*shade;
   return [r|0, g|0, b|0];
 });
 texGrass.repeat.set(200, 200);
@@ -957,43 +989,180 @@ scene.add(buildLandmarks());
 const cabGroup = new THREE.Group();
 scene.add(cabGroup);
 
-// We render cab elements with a separate camera trick? No — keep it simple:
-// they're just objects that follow the train. They'll occlude correctly.
+// Helper — paint a realistic round gauge face into a canvas texture.
+// opts: { label, units, max, majorEvery, minorEvery, redFrom, yellowFrom, sweepFrom, sweepTo }
+function makeGaugeFace(opts){
+  const S = 512;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  // Outer chrome bezel ring
+  const grad = ctx.createRadialGradient(S/2, S/2, S*0.40, S/2, S/2, S*0.50);
+  grad.addColorStop(0.0, '#3a3a3c'); grad.addColorStop(0.5, '#9aa0a8'); grad.addColorStop(1.0, '#1f2024');
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(S/2, S/2, S*0.495, 0, PI*2); ctx.fill();
+  // Inner face (cream-white)
+  const faceGrad = ctx.createRadialGradient(S/2, S/2, S*0.05, S/2, S/2, S*0.42);
+  faceGrad.addColorStop(0, '#f4ede0'); faceGrad.addColorStop(1, '#d8cfbe');
+  ctx.fillStyle = faceGrad; ctx.beginPath(); ctx.arc(S/2, S/2, S*0.42, 0, PI*2); ctx.fill();
+  // Yellow zone arc
+  const sweepFrom = opts.sweepFrom ?? PI*0.75;
+  const sweepTo   = opts.sweepTo   ?? PI*2.25;
+  const arcSpan   = sweepTo - sweepFrom;
+  if (opts.yellowFrom !== undefined){
+    const a0 = sweepFrom + arcSpan * (opts.yellowFrom / opts.max);
+    const a1 = (opts.redFrom !== undefined) ? sweepFrom + arcSpan * (opts.redFrom / opts.max) : sweepTo;
+    ctx.strokeStyle = '#d4a017'; ctx.lineWidth = S*0.04;
+    ctx.beginPath(); ctx.arc(S/2, S/2, S*0.36, a0, a1); ctx.stroke();
+  }
+  // Red zone arc
+  if (opts.redFrom !== undefined){
+    const a0 = sweepFrom + arcSpan * (opts.redFrom / opts.max);
+    ctx.strokeStyle = '#c0202a'; ctx.lineWidth = S*0.04;
+    ctx.beginPath(); ctx.arc(S/2, S/2, S*0.36, a0, sweepTo); ctx.stroke();
+  }
+  // Tick marks + numbers
+  const major = opts.majorEvery || 10;
+  const minor = opts.minorEvery || (major / 5);
+  ctx.strokeStyle = '#1a1a1a'; ctx.fillStyle = '#1a1a1a';
+  for (let v = 0; v <= opts.max + 0.001; v += minor){
+    const a = sweepFrom + arcSpan * (v / opts.max);
+    const isMajor = Math.abs((v / major) - Math.round(v / major)) < 1e-6;
+    const r1 = S*0.42, r2 = isMajor ? S*0.36 : S*0.39;
+    ctx.lineWidth = isMajor ? 4 : 2;
+    ctx.beginPath();
+    ctx.moveTo(S/2 + cos(a)*r1, S/2 + sin(a)*r1);
+    ctx.lineTo(S/2 + cos(a)*r2, S/2 + sin(a)*r2);
+    ctx.stroke();
+    if (isMajor){
+      ctx.font = 'bold ' + Math.round(S*0.058) + 'px Roboto Mono, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const lbl = (v % 1 === 0) ? String(v|0) : v.toFixed(1);
+      ctx.fillText(lbl, S/2 + cos(a)*S*0.30, S/2 + sin(a)*S*0.30);
+    }
+  }
+  // Centre hub
+  const hubGrad = ctx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S*0.04);
+  hubGrad.addColorStop(0, '#444'); hubGrad.addColorStop(1, '#111');
+  ctx.fillStyle = hubGrad; ctx.beginPath(); ctx.arc(S/2, S/2, S*0.045, 0, PI*2); ctx.fill();
+  // Labels
+  ctx.fillStyle = '#1a1a1a';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold ' + Math.round(S*0.06) + 'px Orbitron, sans-serif';
+  ctx.fillText(opts.label, S/2, S*0.66);
+  if (opts.units){
+    ctx.font = Math.round(S*0.045) + 'px Roboto Mono';
+    ctx.fillText(opts.units, S/2, S*0.74);
+  }
+  if (opts.subLabel){
+    ctx.font = Math.round(S*0.035) + 'px Roboto Mono';
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillText(opts.subLabel, S/2, S*0.26);
+  }
+  // Inner glass highlight (top arc)
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.beginPath(); ctx.arc(S/2, S*0.42, S*0.30, PI*1.05, PI*1.95); ctx.lineTo(S/2, S/2); ctx.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+// Helper — make a gauge group: outer bezel mesh, face, needle. Returns { group, needle, faceTex }.
+function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowFrom, radius, sweepFrom, sweepTo, subLabel }){
+  const grp = new THREE.Group();
+  const tex = makeGaugeFace({ label, units, max, majorEvery, minorEvery, redFrom, yellowFrom, sweepFrom, sweepTo, subLabel });
+  // Bezel ring (chrome)
+  const bezel = new THREE.Mesh(
+    new THREE.TorusGeometry(radius * 1.02, radius * 0.08, 12, 32),
+    new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.85, roughness: 0.25 })
+  );
+  bezel.rotation.x = -PI/2;
+  bezel.position.y = 0.005;
+  grp.add(bezel);
+  // Face
+  const face = new THREE.Mesh(
+    new THREE.CircleGeometry(radius, 64),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, metalness: 0.0 })
+  );
+  face.rotation.x = -PI/2;
+  grp.add(face);
+  // Needle — flat triangle
+  const needleShape = new THREE.Shape();
+  needleShape.moveTo(-radius*0.04, 0);
+  needleShape.lineTo(radius*0.04, 0);
+  needleShape.lineTo(0, radius * 0.78);
+  needleShape.lineTo(-radius*0.04, 0);
+  const needleGeo = new THREE.ShapeGeometry(needleShape);
+  const needle = new THREE.Mesh(needleGeo, new THREE.MeshStandardMaterial({ color: 0xff2020, roughness: 0.4, metalness: 0.2, side: THREE.DoubleSide }));
+  needle.rotation.x = -PI/2;
+  needle.position.y = 0.012;
+  grp.add(needle);
+  // Centre hub
+  const hub = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius*0.07, radius*0.07, 0.012, 16),
+    new THREE.MeshStandardMaterial({ color: 0x222, metalness: 0.7, roughness: 0.4 })
+  );
+  hub.position.y = 0.018;
+  grp.add(hub);
+  // Glass cover (faintly tinted, slightly above face)
+  const glass = new THREE.Mesh(
+    new THREE.CircleGeometry(radius * 1.0, 32),
+    new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.0, transmission: 0.8 })
+  );
+  glass.rotation.x = -PI/2;
+  glass.position.y = 0.025;
+  grp.add(glass);
+  return { group: grp, needle };
+}
+
 const cab = (function buildCab(){
   const g = new THREE.Group();
 
-  // Cab is built with -Z = forward (driver looks out windscreen), matching camera default.
-  // Dashboard slab
-  const dashMat = new THREE.MeshStandardMaterial({ color: 0x2c2e30, roughness: 0.6, metalness: 0.1 });
-  const dash = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.38, 1.0), dashMat);
-  dash.position.set(0, 1.05, -1.20);
+  // ==== Cab dashboard built with -Z = forward (driver looks out windscreen) ====
+  // Materials
+  const dashMat   = new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.55, metalness: 0.10 });
+  const panelMat  = new THREE.MeshStandardMaterial({ color: 0x2a2c2f, roughness: 0.70, metalness: 0.05 });
+  const trimMat   = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.40, metalness: 0.30 });
+  const frameMat  = new THREE.MeshStandardMaterial({ color: 0x202225, roughness: 0.45, metalness: 0.30 });
+  const seatMat   = new THREE.MeshStandardMaterial({ color: 0x21303f, roughness: 0.85, metalness: 0.05 });
+  const floorMat  = new THREE.MeshStandardMaterial({ color: 0x16181a, roughness: 0.95 });
+
+  // Main dashboard slab (sloped slightly toward driver — forms the gauge cluster surface)
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.42, 1.05), dashMat);
+  dash.position.set(0, 1.05, -1.18);
+  dash.rotation.x = 0.12;     // top tilts toward driver
   g.add(dash);
 
-  // Lower dashboard return
-  const dash2 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.9, 0.30), dashMat);
+  // Lower dash return (vertical face under instruments)
+  const dash2 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.95, 0.30), dashMat);
   dash2.position.set(0, 0.55, -1.55);
   g.add(dash2);
+  // Knee-roll trim under the dash (thicker bumper edge)
+  const kneeRoll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.4, 16), trimMat);
+  kneeRoll.rotation.z = PI/2;
+  kneeRoll.position.set(0, 0.83, -1.40);
+  g.add(kneeRoll);
 
-  // Floor
-  const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(3.4, 0.05, 2.2),
-    new THREE.MeshStandardMaterial({ color: 0x1c1d1f, roughness: 0.9 })
-  );
+  // Floor with dark non-slip mat texture (procedural)
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 2.2), floorMat);
   floor.position.set(0, 0.0, -0.5);
   g.add(floor);
 
-  // A-pillars and roof frame (frames the windscreen)
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x202225, roughness: 0.5, metalness: 0.3 });
+  // Driver's seat back (just a hint of upholstery behind camera so the player feels seated)
+  const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.8, 0.10), seatMat);
+  seatBack.position.set(0, 1.10, 0.50);
+  g.add(seatBack);
+  const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.10, 0.55), seatMat);
+  seatBase.position.set(0, 0.55, 0.30);
+  g.add(seatBase);
+
+  // A-pillars (chunky, like the real cab) and roof frame
   const pillarL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.4, 0.18), frameMat);
   pillarL.position.set(-1.55, 1.5, -0.55);
   g.add(pillarL);
-  const pillarR = pillarL.clone();
-  pillarR.position.set(1.55, 1.5, -0.55);
-  g.add(pillarR);
+  const pillarR = pillarL.clone(); pillarR.position.set(1.55, 1.5, -0.55); g.add(pillarR);
   const roof = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.18, 1.6), frameMat);
   roof.position.set(0, 2.55, -1.0);
   g.add(roof);
-  // Roof headliner
   const headliner = new THREE.Mesh(
     new THREE.BoxGeometry(3.2, 0.05, 1.6),
     new THREE.MeshStandardMaterial({ color: 0xe2e1dd, roughness: 0.9 })
@@ -1004,192 +1173,278 @@ const cab = (function buildCab(){
   const cpillar = new THREE.Mesh(new THREE.BoxGeometry(0.10, 2.0, 0.10), frameMat);
   cpillar.position.set(0, 1.55, -0.45);
   g.add(cpillar);
-  // Wiper arms (animated later)
-  const wiperMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness:0.6, roughness:0.4 });
+  // Sun visors (folded)
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0x383838, roughness: 0.9 });
+  const visorL = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.04, 0.20), visorMat);
+  visorL.position.set(-0.7, 2.36, -0.55); g.add(visorL);
+  const visorR = visorL.clone(); visorR.position.set(0.7, 2.36, -0.55); g.add(visorR);
+
+  // Wiper arms
+  const wiperMat = new THREE.MeshStandardMaterial({ color: 0x101010, metalness: 0.6, roughness: 0.4 });
   const wL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.9), wiperMat);
   wL.geometry.translate(0, 0, -0.45);
   wL.position.set(-0.85, 1.92, -0.48);
-  wL.userData.base = wL.rotation.clone(); g.add(wL);
-  const wR = wL.clone();
-  wR.position.set(0.85, 1.92, -0.48);
-  g.add(wR);
+  g.add(wL);
+  const wR = wL.clone(); wR.position.set(0.85, 1.92, -0.48); g.add(wR);
 
-  // Speedometer
-  const gaugeFace = (() => {
+  // ==== Instrument cluster — three round gauges + AWS sunflower + LEDs ====
+  // The dashboard slab is tilted by 0.12 rad. Instruments sit on top of it tilted likewise.
+  const clusterY = 1.30;
+  const clusterZ = -1.05;
+  const tiltX = -PI/2 + 0.12;       // face up the tilted dash
+
+  // Speedometer (left)
+  const speedo = makeGauge({
+    label: 'MPH', units: 'CLASS 333', max: 100, majorEvery: 10, minorEvery: 5,
+    yellowFrom: 75, redFrom: 100, radius: 0.18, subLabel: 'SPEED'
+  });
+  speedo.group.position.set(-0.55, clusterY, clusterZ);
+  speedo.group.rotation.x = 0.12;
+  g.add(speedo.group);
+
+  // Brake-cylinder pressure (centre-left)
+  const press = makeGauge({
+    label: 'BAR', units: 'BC PRESS', max: 5, majorEvery: 1, minorEvery: 0.2,
+    yellowFrom: 4, redFrom: 4.5, radius: 0.13, subLabel: 'BRAKE CYL'
+  });
+  press.group.position.set(0.55, clusterY, clusterZ);
+  press.group.rotation.x = 0.12;
+  g.add(press.group);
+
+  // Main reservoir pressure (right)
+  const mr = makeGauge({
+    label: 'BAR', units: 'MR PRESS', max: 12, majorEvery: 2, minorEvery: 0.5,
+    redFrom: 0, yellowFrom: 6.5, radius: 0.13, sweepFrom: PI*0.75, sweepTo: PI*2.25,
+    subLabel: 'MAIN RES'
+  });
+  // override redFrom semantics: red below 6.5 — easier to fake by drawing a fixed yellow band
+  mr.group.position.set(1.05, clusterY, clusterZ);
+  mr.group.rotation.x = 0.12;
+  g.add(mr.group);
+
+  // AWS sunflower indicator (just left of speedo)
+  const awsTexN = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 256;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#0a0d10'; ctx.fillRect(0,0,256,256);
-    ctx.strokeStyle = '#cfe6f7'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(128,128, 110, PI*0.75, PI*2.25); ctx.stroke();
-    ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 20px Roboto Mono'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    for (let i=0;i<=10;i++){
-      const a = PI*0.75 + (PI*1.5)*(i/10);
-      const x1 = 128+cos(a)*98, y1 = 128+sin(a)*98;
-      const x2 = 128+cos(a)*112, y2 = 128+sin(a)*112;
-      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-      ctx.fillText(String(i*10), 128+cos(a)*78, 128+sin(a)*78);
-    }
-    ctx.fillStyle = '#9ccfff';
-    ctx.font='bold 16px Orbitron'; ctx.fillText('MPH', 128, 200);
-    ctx.font='10px Roboto Mono'; ctx.fillText('CLASS 333', 128, 60);
+    // Outer chrome ring
+    const grad = ctx.createRadialGradient(128,128, 100, 128, 128, 128);
+    grad.addColorStop(0,'#3a3a3c'); grad.addColorStop(1,'#1a1a1a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(128,128, 100, 0, PI*2); ctx.fill();
     return new THREE.CanvasTexture(c);
   })();
-  const speedo = new THREE.Mesh(
-    new THREE.CircleGeometry(0.16, 32),
-    new THREE.MeshBasicMaterial({ map: gaugeFace })
-  );
-  speedo.rotation.x = -PI*0.45;
-  speedo.position.set(-0.45, 1.27, -1.05);
-  g.add(speedo);
-  const speedoNeedle = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.012, 0.13),
-    new THREE.MeshBasicMaterial({ color: 0xff5c5c })
-  );
-  speedoNeedle.geometry.translate(0, 0.06, 0);
-  speedoNeedle.rotation.x = -PI*0.45;
-  speedoNeedle.position.set(-0.45, 1.275, -1.045);
-  g.add(speedoNeedle);
-
-  // Brake pressure gauge (right of speedo)
-  const pressFace = (() => {
+  const awsTexW = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 256;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#0a0d10'; ctx.fillRect(0,0,256,256);
-    ctx.strokeStyle = '#cfe6f7'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(128,128, 110, PI*0.75, PI*2.25); ctx.stroke();
-    ctx.fillStyle = '#cfe6f7'; ctx.font='bold 14px Roboto Mono'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    for (let i=0;i<=8;i++){
-      const a = PI*0.75 + (PI*1.5)*(i/8);
-      ctx.fillText(String(i), 128+cos(a)*78, 128+sin(a)*78);
+    const grad = ctx.createRadialGradient(128,128, 100, 128, 128, 128);
+    grad.addColorStop(0,'#3a3a3c'); grad.addColorStop(1,'#1a1a1a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+    for (let i=0;i<8;i++){
+      ctx.fillStyle = (i%2===0) ? '#ffd400' : '#000';
+      ctx.beginPath(); ctx.moveTo(128,128);
+      ctx.arc(128,128, 100, i*PI/4, (i+1)*PI/4); ctx.closePath(); ctx.fill();
     }
-    ctx.fillStyle = '#9ccfff'; ctx.font='10px Orbitron'; ctx.fillText('BRAKE BAR', 128, 200);
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(128,128, 28, 0, PI*2); ctx.fill();
     return new THREE.CanvasTexture(c);
   })();
-  const press = new THREE.Mesh(
-    new THREE.CircleGeometry(0.13, 32),
-    new THREE.MeshBasicMaterial({ map: pressFace })
-  );
-  press.rotation.x = -PI*0.45;
-  press.position.set(0.45, 1.27, -1.05);
-  g.add(press);
-  const pressNeedle = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.010, 0.10),
-    new THREE.MeshBasicMaterial({ color: 0xff5c5c })
-  );
-  pressNeedle.geometry.translate(0, 0.05, 0);
-  pressNeedle.rotation.x = -PI*0.45;
-  pressNeedle.position.set(0.45, 1.275, -1.045);
-  g.add(pressNeedle);
+  const awsMat = new THREE.MeshStandardMaterial({ map: awsTexN, roughness: 0.5 });
+  const aws = new THREE.Mesh(new THREE.CircleGeometry(0.07, 32), awsMat);
+  aws.rotation.x = tiltX;
+  aws.position.set(-0.18, clusterY + 0.005, clusterZ);
+  g.add(aws);
 
-  // Master controller (centre, combined power/brake) — bigger, more prominent
-  const mcBase = new THREE.Mesh(
-    new THREE.BoxGeometry(0.85, 0.12, 0.42),
-    new THREE.MeshStandardMaterial({ color: 0x16181a, roughness:0.6 })
+  // Status indicators panel — labelled LEDs
+  // Builds a tile with a label and a coloured dot. Returns { ring, dot }.
+  function indicator(label, x, defaultColor){
+    const grp = new THREE.Group();
+    grp.position.set(x, clusterY + 0.005, clusterZ + 0.18);
+    grp.rotation.x = tiltX;
+    // Label plate
+    const lblCanvas = document.createElement('canvas');
+    lblCanvas.width = 256; lblCanvas.height = 64;
+    const ctx = lblCanvas.getContext('2d');
+    ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,256,64);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 28px Orbitron, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, 128, 32);
+    ctx.strokeStyle = '#3a4350'; ctx.lineWidth = 3; ctx.strokeRect(2,2,252,60);
+    const lblTex = new THREE.CanvasTexture(lblCanvas);
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.04), new THREE.MeshBasicMaterial({ map: lblTex }));
+    plate.position.set(0, 0, 0.03);
+    grp.add(plate);
+    // Dot ring
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.013, 0.018, 24),
+      new THREE.MeshStandardMaterial({ color: 0x202225, metalness: 0.7, roughness: 0.4 })
+    );
+    ring.position.set(0, 0.001, 0);
+    grp.add(ring);
+    // MeshBasicMaterial so the existing code's setHex on .color visibly toggles the LED
+    // between dim (off) and bright (on) without needing emissive juggling.
+    const dot = new THREE.Mesh(
+      new THREE.CircleGeometry(0.013, 24),
+      new THREE.MeshBasicMaterial({ color: 0x222222 })
+    );
+    dot.userData.onColor = defaultColor;
+    dot.position.set(0, 0.002, 0);
+    grp.add(dot);
+    g.add(grp);
+    return dot;
+  }
+  const ledHead = indicator('HEAD', -0.95, 0xff8a8a);
+  const ledDoor = indicator('DOORS', -0.75, 0xffe28a);
+  const ledDsd  = indicator('DSD',   -0.55, 0xff8a8a);
+  const ledTpws = indicator('TPWS',  -0.35, 0xffaa66);
+  const ledRgs  = indicator('REGEN', -0.15, 0x9cff9c);
+  const ledHorn = indicator('HORN',   1.20, 0x8acfff);
+
+  // ==== TMS / driver display (right side of dash) — small CRT-style screen ====
+  const tmsTex = (() => {
+    const c = document.createElement('canvas'); c.width = 768; c.height = 320;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#03110b'; ctx.fillRect(0,0,768,320);
+    ctx.strokeStyle = '#103018'; for (let y = 0; y < 320; y += 4){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(768,y); ctx.stroke(); }
+    ctx.font = 'bold 28px Roboto Mono, monospace'; ctx.fillStyle = '#7cf08a'; ctx.textAlign='left';
+    ctx.fillText('CLASS 333  TMS', 32, 50);
+    ctx.font = '20px Roboto Mono'; ctx.fillStyle = '#5acd6e';
+    ctx.fillText('SERVICE  2L42  LDS → SKI', 32, 96);
+    ctx.fillText('NEXT     ----', 32, 134);
+    ctx.fillText('SPEED    ----', 32, 168);
+    ctx.fillText('LIMIT    ----', 32, 202);
+    ctx.fillText('SCHED    ----', 32, 236);
+    ctx.font = '16px Roboto Mono'; ctx.fillStyle = '#3aa050';
+    ctx.fillText('[F1] BRAKE TEST   [F2] DOORS   [F3] HEADCODE', 32, 280);
+    return new THREE.CanvasTexture(c);
+  })();
+  const tmsScreenMat = new THREE.MeshStandardMaterial({ map: tmsTex, emissive: 0x183a20, emissiveMap: tmsTex, emissiveIntensity: 0.6, roughness: 0.6 });
+  const tmsBezel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.62, 0.32, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x0d0e10, roughness: 0.5, metalness: 0.4 })
   );
-  mcBase.position.set(0, 1.10, -0.95);
-  g.add(mcBase);
-  // Notch labels strip
-  const notchTex = (()=> {
+  tmsBezel.position.set(-1.20, clusterY + 0.04, clusterZ - 0.02);
+  tmsBezel.rotation.x = 0.12;
+  g.add(tmsBezel);
+  const tmsScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.26), tmsScreenMat);
+  tmsScreen.position.set(-1.20, clusterY + 0.046, clusterZ - 0.02);
+  tmsScreen.rotation.x = -PI/2 + 0.12;
+  g.add(tmsScreen);
+
+  // ==== Master controller (centre-low, just in front of driver) ====
+  // Pedestal base (industrial cast-metal look)
+  const pedMat = new THREE.MeshStandardMaterial({ color: 0x101113, roughness: 0.6, metalness: 0.20 });
+  const ped = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.16, 0.50), pedMat);
+  ped.position.set(0, 1.06, -0.85);
+  g.add(ped);
+  // Notch labels strip — etched into the pedestal top
+  const notchTex = (() => {
     const c = document.createElement('canvas'); c.width = 1024; c.height = 192;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#0a0c0e'; ctx.fillRect(0,0,1024,192);
-    ctx.strokeStyle = '#5cc8ff'; ctx.lineWidth = 3;
-    ctx.strokeRect(3,3,1018,186);
+    const grad = ctx.createLinearGradient(0,0,0,192);
+    grad.addColorStop(0,'#151618'); grad.addColorStop(1,'#0a0b0d');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,1024,192);
     const labels = ['EB','B5','B4','B3','B2','B1','OFF','P1','P2','P3','P4'];
-    ctx.font = 'bold 44px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font = 'bold 42px Orbitron, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     labels.forEach((l,i)=>{
-      const x = 50 + i * (924/(labels.length-1));
-      ctx.fillStyle = (l==='OFF') ? '#9ccfff' : (l[0]==='B'||l==='EB') ? '#ffaa66' : '#9cffaf';
-      ctx.fillText(l, x, 96);
-      // tick mark
-      ctx.strokeStyle = 'rgba(140,170,200,0.6)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(x, 152); ctx.lineTo(x, 178); ctx.stroke();
+      const x = 60 + i * (904/(labels.length-1));
+      const isPwr = (l[0]==='P');
+      const isBrk = (l[0]==='B' || l==='EB');
+      ctx.fillStyle = isPwr ? '#9cffaf' : isBrk ? '#ffae66' : '#cfe6f7';
+      ctx.fillText(l, x, 88);
+      // detent tick + slot
+      ctx.strokeStyle = 'rgba(180,210,235,0.45)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, 132); ctx.lineTo(x, 174); ctx.stroke();
     });
+    // Slot for the lever to ride in
+    ctx.fillStyle = '#000'; ctx.fillRect(40, 150, 944, 6);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
   const notchStrip = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.80, 0.15),
-    new THREE.MeshBasicMaterial({ map: notchTex })
+    new THREE.PlaneGeometry(0.86, 0.16),
+    new THREE.MeshStandardMaterial({ map: notchTex, roughness: 0.55 })
   );
   notchStrip.rotation.x = -PI/2;
-  notchStrip.position.set(0, 1.165, -0.95);
+  notchStrip.position.set(0, 1.142, -0.85);
   g.add(notchStrip);
-  // Current-notch indicator dot — moves along the strip with notch
+  // Current-notch indicator dot — moves along the strip with notch (red glowing)
   const notchDot = new THREE.Mesh(
-    new THREE.SphereGeometry(0.025, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0xff5c5c })
+    new THREE.SphereGeometry(0.022, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xff3030, emissiveIntensity: 1.0 })
   );
-  notchDot.position.set(0, 1.20, -0.95);
+  notchDot.position.set(0, 1.16, -0.85);
   g.add(notchDot);
-  // Lever — bigger, more visible
-  const leverMat = new THREE.MeshStandardMaterial({ color: 0xc02828, metalness:0.4, roughness:0.4 });
+  // Lever — chunky two-part mechanical handle with ribbed grip
+  const leverMat = new THREE.MeshStandardMaterial({ color: 0x9c1c1c, metalness: 0.5, roughness: 0.35 });
   const lever = new THREE.Group();
-  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.030, 0.42, 12), leverMat);
-  stick.position.y = 0.21;
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.030, 0.40, 16), leverMat);
+  stick.position.y = 0.20;
   lever.add(stick);
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 12), leverMat);
-  knob.position.y = 0.45;
-  lever.add(knob);
-  lever.position.set(0, 1.17, -0.95);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.04, 16), new THREE.MeshStandardMaterial({ color: 0x202225, metalness: 0.7, roughness: 0.3 }));
+  collar.position.y = 0.04;
+  lever.add(collar);
+  // Pommel grip — slightly larger
+  const pommel = new THREE.Mesh(new THREE.CapsuleGeometry(0.060, 0.10, 12, 18), leverMat);
+  pommel.position.y = 0.46;
+  lever.add(pommel);
+  lever.position.set(0, 1.16, -0.85);
   g.add(lever);
 
-  // Horn lever (left side)
-  const horn = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.025, 0.030, 0.25, 12),
-    new THREE.MeshStandardMaterial({ color: 0x202225, metalness:0.6, roughness:0.4 })
-  );
-  horn.position.set(-1.30, 1.20, -1.05);
-  horn.rotation.z = 0.25;
-  g.add(horn);
-
-  // AWS sunflower indicator (right of speedo)
-  const awsTexN = (()=> {
-    const c = document.createElement('canvas'); c.width=c.height=128;
-    const ctx = c.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0,0,128,128);
-    // Black solid disc — clear AWS
-    ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(64,64,56,0,PI*2); ctx.fill();
-    ctx.strokeStyle = '#666'; ctx.lineWidth = 3; ctx.stroke();
-    return new THREE.CanvasTexture(c);
-  })();
-  const awsTexW = (()=> {
-    const c = document.createElement('canvas'); c.width=c.height=128;
-    const ctx = c.getContext('2d');
-    // Yellow & black sunflower
-    for (let i=0;i<8;i++){
-      ctx.fillStyle = (i%2===0)?'#ffd400':'#000';
-      ctx.beginPath(); ctx.moveTo(64,64);
-      ctx.arc(64,64, 56, i*PI/4, (i+1)*PI/4); ctx.closePath(); ctx.fill();
-    }
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(64,64,18,0,PI*2); ctx.fill();
-    return new THREE.CanvasTexture(c);
-  })();
-  const awsMat = new THREE.MeshBasicMaterial({ map: awsTexN });
-  const aws = new THREE.Mesh(new THREE.CircleGeometry(0.06, 32), awsMat);
-  aws.rotation.x = -PI*0.45;
-  aws.position.set(-0.12, 1.27, -1.05);
-  g.add(aws);
-
-  // DSD pedal indicator + a few status LEDs
-  function led(color, x){
-    const led = new THREE.Mesh(
-      new THREE.CircleGeometry(0.018, 16),
-      new THREE.MeshBasicMaterial({ color })
-    );
-    led.rotation.x = -PI*0.45;
-    led.position.set(x, 1.27, -1.05);
-    g.add(led);
-    return led;
+  // ==== Side switch panel (lights / wipers / horn select) on left of master controller ====
+  function toggleSwitch(label, x, y, z, on){
+    const grp = new THREE.Group();
+    grp.position.set(x, y, z);
+    grp.rotation.x = 0.12;
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.10), panelMat);
+    grp.add(housing);
+    const toggleMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.85, roughness: 0.20 });
+    const toggle = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.045, 8), toggleMat);
+    toggle.position.set(0, 0.02, on ? -0.025 : 0.025);
+    toggle.rotation.x = on ? -0.5 : 0.5;
+    grp.add(toggle);
+    // Label
+    const c = document.createElement('canvas'); c.width = 128; c.height = 32;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,128,32);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 16px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, 64, 16);
+    const lblTex = new THREE.CanvasTexture(c);
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.10, 0.025), new THREE.MeshBasicMaterial({ map: lblTex }));
+    plate.position.set(0, 0.022, 0.07);
+    plate.rotation.x = -PI/2;
+    grp.add(plate);
+    g.add(grp);
+    return { toggle, on };
   }
-  const ledHead = led(0x222222, 0.15);
-  const ledDoor = led(0x222222, 0.20);
-  const ledDsd  = led(0x222222, 0.25);
+  const swHead = toggleSwitch('HEADLIGHTS', -0.90, 1.085, -0.78, false);
+  const swWipers = toggleSwitch('WIPERS', -0.78, 1.085, -0.78, false);
+  const swCabLight = toggleSwitch('CAB LT', -0.66, 1.085, -0.78, true);
+
+  // ==== Horn paddle (left dashboard) ====
+  const hornHousing = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.16), panelMat);
+  hornHousing.position.set(-1.30, 1.16, -0.95);
+  hornHousing.rotation.x = 0.12;
+  g.add(hornHousing);
+  const hornPaddle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.06), new THREE.MeshStandardMaterial({ color: 0xffd23a, metalness: 0.3, roughness: 0.5 }));
+  hornPaddle.position.set(-1.30, 1.20, -0.92);
+  hornPaddle.rotation.x = 0.12;
+  g.add(hornPaddle);
+
+  // ==== Side-window frames (sliding cab sides) ====
+  const sideMat = new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.6, metalness: 0.2 });
+  const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.0, 0.9), sideMat);
+  sideL.position.set(-1.65, 1.55, -0.10);
+  g.add(sideL);
+  const sideR = sideL.clone(); sideR.position.set(1.65, 1.55, -0.10); g.add(sideR);
+
+  // Aliases for existing code paths
+  const speedoNeedle = speedo.needle;
+  const pressNeedle  = press.needle;
+  const mrNeedle     = mr.needle;
 
   return {
     group: g,
-    speedoNeedle, pressNeedle,
+    speedoNeedle, pressNeedle, mrNeedle,
     lever, notchDot,
     awsMat, awsTexN, awsTexW,
-    ledHead, ledDoor, ledDsd,
+    ledHead, ledDoor, ledDsd, ledTpws, ledRgs, ledHorn,
+    swHead, swWipers, swCabLight,
     wL, wR,
   };
 })();
@@ -1683,9 +1938,11 @@ canvas.addEventListener('pointermove', e=>{
 function placeCamera(){
   const f = trackFrame(GS.km);
   camRig.position.copy(f.p);
-  // Rig orientation: -Z axis aligned with tangent so the camera (which looks down -Z by default)
-  // looks forward along the track. lookAt uses (0,1,0) up by default.
-  camRig.lookAt(f.p.clone().add(f.t));
+  // camRig is a plain Object3D, not a Camera. For non-camera Object3D, lookAt(target)
+  // orients +Z at the target — but the camera child looks down -Z, which would face
+  // BACKWARD along the route. Pass the opposite point so rig's +Z is -tangent and the
+  // camera's -Z is +tangent (forward along the track).
+  camRig.lookAt(f.p.clone().sub(f.t));
   // Camera local rotation (player look) layered on top
   camera.rotation.set(lookPitch, lookYaw, 0);
   // Cab follows the rig directly. Cab geometry was built with -Z = forward (windscreen),
