@@ -584,7 +584,7 @@ function buildTrack(){
   const rg = new THREE.Group();
   function buildRail(centreOffset, signRail){
     const pts = [];
-    const stepRail = 0.05;       // tighter for smooth highlights
+    const stepRail = 0.10;       // 100m control-point spacing — Catmull-Rom smooths the curve
     const railSegs = floor(ROUTE.totalKm / stepRail);
     for (let i = 0; i <= railSegs; i++){
       const km = i * stepRail;
@@ -602,7 +602,7 @@ function buildTrack(){
     railShape.lineTo(-0.020, 0.10); railShape.lineTo(-0.035, 0.10);
     railShape.lineTo(-0.035, 0);
     const geom = new THREE.ExtrudeGeometry(railShape, {
-      steps: pts.length * 2, extrudePath: path, bevelEnabled: false,
+      steps: pts.length, extrudePath: path, bevelEnabled: false,
     });
     const mat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, metalness: 0.85, roughness: 0.35 });
     return new THREE.Mesh(geom, mat);
@@ -615,30 +615,35 @@ function buildTrack(){
   rg.add(buildRail(TRACK_GAUGE_OFFSET,  1));
   group.add(rg);
 
-  // SLEEPERS — single wide sleeper across both tracks (~6.6m). UK double-track
-  // typically uses separate sleepers per track, but a shared width reads fine
-  // and halves the instance count.
-  const sleeperWidth = TRACK_GAUGE_OFFSET + 2.6;
-  const sleeperGeo = new THREE.BoxGeometry(sleeperWidth, 0.18, 0.22);
+  // SLEEPERS — separate sleepers for each track (2.6m each, with the
+  // ~1.4m cess gap between them visible). Two InstancedMeshes share geometry.
+  const sleeperGeo = new THREE.BoxGeometry(2.6, 0.18, 0.22);
   const sleeperMat = new THREE.MeshStandardMaterial({ map: texSleeper, roughness: 1.0 });
-  const sleeperSpacing = 0.65;
+  // 0.85m spacing reduces the per-track instance count by ~25% vs 0.65m;
+  // doubling the track also doubled the sleeper count, which on lower-end
+  // GPUs has been observed to OOM the GPU process and crash the tab.
+  const sleeperSpacing = 0.85;
   const totalM = ROUTE.totalKm * KM;
   const count = floor(totalM / sleeperSpacing);
-  const inst = new THREE.InstancedMesh(sleeperGeo, sleeperMat, count);
-  const tmp = new THREE.Object3D();
-  for (let i = 0; i < count; i++){
-    const km = (i * sleeperSpacing) / KM;
-    const f = trackFrame(km);
-    tmp.position.copy(f.p)
-      .add(f.r.clone().multiplyScalar(pairCentre))   // centre on pair midpoint
-      .add(new THREE.Vector3(0, -0.20, 0));
-    const yaw = Math.atan2(-f.t.x, -f.t.z);
-    tmp.rotation.set(0, yaw, 0);
-    tmp.updateMatrix();
-    inst.setMatrixAt(i, tmp.matrix);
+  function buildSleeperRow(centreOffset){
+    const inst = new THREE.InstancedMesh(sleeperGeo, sleeperMat, count);
+    const tmp = new THREE.Object3D();
+    for (let i = 0; i < count; i++){
+      const km = (i * sleeperSpacing) / KM;
+      const f = trackFrame(km);
+      tmp.position.copy(f.p)
+        .add(f.r.clone().multiplyScalar(centreOffset))
+        .add(new THREE.Vector3(0, -0.20, 0));
+      const yaw = Math.atan2(-f.t.x, -f.t.z);
+      tmp.rotation.set(0, yaw, 0);
+      tmp.updateMatrix();
+      inst.setMatrixAt(i, tmp.matrix);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    return inst;
   }
-  inst.instanceMatrix.needsUpdate = true;
-  group.add(inst);
+  group.add(buildSleeperRow(0));                    // player track
+  group.add(buildSleeperRow(TRACK_GAUGE_OFFSET));   // opposite-direction track
 
   return group;
 }
@@ -752,7 +757,12 @@ function buildStations(){
     function platformAt(side){
       const pg = new THREE.Group();
       const sign = (side === 'L') ? -1 : 1;
-      const offset = sign * (1.8 + platformW/2);   // beyond track gauge
+      // 'L' platforms sit outside the player's track; 'R' platforms sit outside
+      // the opposite-direction track. So each platform serves a single track —
+      // the player's train uses the L platform, the opposite-direction train
+      // uses the R platform — exactly as a real two-platform UK station does.
+      const trackCentre = (side === 'L') ? 0 : TRACK_GAUGE_OFFSET;
+      const offset = trackCentre + sign * (1.8 + platformW/2);
       // Platform slab
       const slab = new THREE.Mesh(
         new THREE.BoxGeometry(platformW, platformH, platLen),
