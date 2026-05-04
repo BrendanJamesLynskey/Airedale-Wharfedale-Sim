@@ -1168,13 +1168,21 @@ const cab = (function buildCab(){
   visorL.position.set(-0.7, 2.36, -0.55); g.add(visorL);
   const visorR = visorL.clone(); visorR.position.set(0.7, 2.36, -0.55); g.add(visorR);
 
-  // Wiper arms
+  // Wiper arms — rest at the bottom of each windscreen, lying flat across it.
+  // At y≈1.42 they sit clearly below the driver's eye (y=1.85), so the blade does
+  // not cross the forward view. The pivot is the inner-bottom corner of the pane;
+  // the blade extends outward toward the side pillar.
   const wiperMat = new THREE.MeshStandardMaterial({ color: 0x101010, metalness: 0.6, roughness: 0.4 });
-  const wL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.9), wiperMat);
-  wL.geometry.translate(0, 0, -0.45);
-  wL.position.set(-0.85, 1.92, -0.48);
+  // Blade: 0.55m long, very thin, oriented along X. Geometry is offset so the
+  // mesh origin sits at the inner end, allowing rotation.y to sweep about that pivot.
+  const wL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.018, 0.018), wiperMat);
+  wL.geometry.translate(-0.275, 0, 0);
+  wL.position.set(-0.18, 1.42, -0.50);
   g.add(wL);
-  const wR = wL.clone(); wR.position.set(0.85, 1.92, -0.48); g.add(wR);
+  const wR = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.018, 0.018), wiperMat);
+  wR.geometry.translate(0.275, 0, 0);
+  wR.position.set(0.18, 1.42, -0.50);
+  g.add(wR);
 
   // ==== Instrument cluster — three round gauges + AWS sunflower + LEDs ====
   // The dashboard slab is tilted by 0.12 rad. Instruments sit on top of it tilted likewise.
@@ -1893,12 +1901,16 @@ function updateCabAnim(dt){
     cab.lever.children.forEach(m => m.material.emissive && m.material.emissive.setHex(0x000000));
   }
 
-  // Wipers
+  // Wipers — sweep about Z (each blade rotates about its inner pivot in the
+  // windscreen plane). At rest both blades lie flat along the bottom of the pane.
   if (GS.wipers){
     GS.wiperPhase += dt * 4;
-    const a = sin(GS.wiperPhase) * 1.2;
-    cab.wL.rotation.y = a;
-    cab.wR.rotation.y = a + 0.05;
+    const a = (sin(GS.wiperPhase) * 0.5 + 0.5) * 1.0;     // 0..1.0 rad sweep
+    cab.wL.rotation.z =  a;       // L blade arcs upward to the right
+    cab.wR.rotation.z = -a;       // R blade arcs upward to the left
+  } else {
+    cab.wL.rotation.z = 0;
+    cab.wR.rotation.z = 0;
   }
 }
 
