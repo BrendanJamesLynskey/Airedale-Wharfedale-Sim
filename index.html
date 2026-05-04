@@ -131,20 +131,22 @@ const ROUTE = {
   name: 'Airedale Line',
   service: '2L42 LEEDS → SKIPTON',
   totalKm: 41.8,
-  // Stations: km along, name, code, platformLen(m), side('L'|'R'|'I' island), elevation(m)
+  // Stations: km along the line, name, code, platformLen(m), side('L'|'R'|'I'),
+  // elevation(m), and real-world lat/lon (used to lay out the track centreline
+  // through accurate waypoints — see trackPoint below).
   // stopMarker: optional label rendered as a "stop car marker" on the platform.
   stations: [
-    { km:  0.00, name: 'Leeds',                code: 'LDS', plat: 250, side: 'I', elev: 50, plat_no: 13 },
-    { km:  6.40, name: 'Kirkstall Forge',      code: 'KLF', plat: 130, side: 'L', elev: 60 },
-    { km: 10.60, name: 'Apperley Bridge',      code: 'APY', plat: 100, side: 'L', elev: 80 },
-    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80, stopMarker: '4 CAR' },
-    { km: 15.65, name: 'Saltaire',             code: 'SAE', plat: 110, side: 'L', elev: 80 },
-    { km: 19.50, name: 'Bingley',              code: 'BIY', plat: 130, side: 'L', elev: 90 },
-    { km: 20.85, name: 'Crossflatts',          code: 'CFL', plat:  95, side: 'L', elev: 95 },
-    { km: 25.45, name: 'Keighley',             code: 'KEI', plat: 175, side: 'I', elev: 100 },
-    { km: 28.55, name: 'Steeton & Silsden',    code: 'SON', plat: 100, side: 'L', elev: 115 },
-    { km: 32.50, name: 'Cononley',             code: 'CEY', plat:  95, side: 'L', elev: 110 },
-    { km: 41.80, name: 'Skipton',              code: 'SKI', plat: 200, side: 'I', elev: 120 },
+    { km:  0.00, name: 'Leeds',                code: 'LDS', plat: 250, side: 'I', elev: 50, plat_no: 13, lat: 53.7958, lon: -1.5479 },
+    { km:  6.40, name: 'Kirkstall Forge',      code: 'KLF', plat: 130, side: 'L', elev: 60,              lat: 53.8249, lon: -1.6068 },
+    { km: 10.60, name: 'Apperley Bridge',      code: 'APY', plat: 100, side: 'L', elev: 80,              lat: 53.8347, lon: -1.7000 },
+    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80, stopMarker: '4 CAR', lat: 53.8348, lon: -1.7706 },
+    { km: 15.65, name: 'Saltaire',             code: 'SAE', plat: 110, side: 'L', elev: 80,              lat: 53.8388, lon: -1.7918 },
+    { km: 19.50, name: 'Bingley',              code: 'BIY', plat: 130, side: 'L', elev: 90,              lat: 53.8480, lon: -1.8378 },
+    { km: 20.85, name: 'Crossflatts',          code: 'CFL', plat:  95, side: 'L', elev: 95,              lat: 53.8505, lon: -1.8519 },
+    { km: 25.45, name: 'Keighley',             code: 'KEI', plat: 175, side: 'I', elev: 100,             lat: 53.8678, lon: -1.9036 },
+    { km: 28.55, name: 'Steeton & Silsden',    code: 'SON', plat: 100, side: 'L', elev: 115,             lat: 53.8941, lon: -1.9456 },
+    { km: 32.50, name: 'Cononley',             code: 'CEY', plat:  95, side: 'L', elev: 110,             lat: 53.9276, lon: -1.9766 },
+    { km: 41.80, name: 'Skipton',              code: 'SKI', plat: 200, side: 'I', elev: 120,             lat: 53.9608, lon: -2.0163 },
   ],
   // Schedule (cumulative seconds from departure Leeds)
   schedule: [0, 480, 720, 1020, 1140, 1380, 1500, 1740, 1920, 2100, 2580],
@@ -205,26 +207,63 @@ function fmtTime(s){s=floor(s);const m=floor(s/60),ss=s%60;return String(m).padS
 
 // ============================================================
 // TRACK CENTRELINE (km → world XYZ)
-// World units: 1 = 1 metre. Track laid roughly along +X with gentle curves.
-// We apply low-frequency sinusoidal curvature for realism, plus the elevation
-// profile interpolated from station elevations.
+// World units: 1 = 1 metre. Each station carries its real lat/lon; we project
+// these onto a local equirectangular plane centred on Leeds and then build a
+// Catmull-Rom curve through the waypoints, parametrised by km along the line.
+// The route therefore curves through the same towns and bends as the real
+// Airedale Line: north out of Leeds, west through Kirkstall Forge and the
+// Aire valley, sweeping NW through Shipley/Saltaire/Bingley to Skipton.
 // ============================================================
+const LEEDS_LAT = 53.7958, LEEDS_LON = -1.5479;
+const LAT_TO_M = 111000;
+const LON_TO_M = 111000 * Math.cos(LEEDS_LAT * Math.PI / 180);
+// Project station lat/lon to local XZ. +X = the direction Skipton lies (roughly
+// west and north of Leeds), so longitude offsets are negated and rotated so the
+// route generally trends along +X with curvature in Z. The mean Leeds→Skipton
+// bearing (about N30W) is used as the +X axis to keep the route compact.
+const ROUTE_BEARING_DEG = 305;          // Leeds → Skipton bearing, degrees true
+const ROUTE_BEARING = ROUTE_BEARING_DEG * Math.PI / 180;
+const _cosBR = Math.cos(ROUTE_BEARING - Math.PI/2);
+const _sinBR = Math.sin(ROUTE_BEARING - Math.PI/2);
+ROUTE.stations.forEach(s => {
+  const east  = (s.lon - LEEDS_LON) * LON_TO_M;
+  const north = (s.lat - LEEDS_LAT) * LAT_TO_M;
+  // Rotate (east, north) so the +X axis points along the mean route bearing.
+  // For bearing β measured CW from north: forward = (sin β, cos β); right = (cos β, -sin β).
+  const sinB = Math.sin(ROUTE_BEARING), cosB = Math.cos(ROUTE_BEARING);
+  s.X = east * sinB + north * cosB;
+  s.Z = east * cosB - north * sinB;
+});
+const TRACK_GAUGE_OFFSET = 4.0;         // metres between centrelines (UK double track)
+
+function _catmullRom(p0, p1, p2, p3, t){
+  const t2 = t*t, t3 = t2*t;
+  // Centripetal-style smoothing via standard Catmull-Rom matrix
+  return (
+    p0 * (-0.5*t3 +     t2 - 0.5*t) +
+    p1 * ( 1.5*t3 - 2.5*t2          + 1.0) +
+    p2 * (-1.5*t3 + 2.0*t2 + 0.5*t) +
+    p3 * ( 0.5*t3 - 0.5*t2)
+  );
+}
+
 function trackPoint(km){
-  // Curvature: small lateral offset with km, more bends past Bingley
-  const x = km * KM;
-  const curveAmp = 80 + min(km, 30) * 4;
-  const z = sin(km * 0.18) * curveAmp + sin(km * 0.07 + 1.3) * curveAmp * 0.6;
-  // Elevation interpolated between station markers
   const stns = ROUTE.stations;
-  let y = stns[0].elev;
-  for (let i = 0; i < stns.length - 1; i++) {
-    if (km >= stns[i].km && km <= stns[i+1].km) {
-      const t = (km - stns[i].km) / (stns[i+1].km - stns[i].km);
-      y = lerp(stns[i].elev, stns[i+1].elev, smoothstep(0,1,t));
-      break;
-    }
+  // Find segment [i, i+1]
+  let i = 0;
+  for (; i < stns.length - 2; i++){
+    if (km < stns[i+1].km) break;
   }
-  if (km > stns[stns.length-1].km) y = stns[stns.length-1].elev;
+  i = clamp(i, 0, stns.length - 2);
+  const t = clamp((km - stns[i].km) / (stns[i+1].km - stns[i].km), 0, 1);
+  const i0 = max(0, i - 1);
+  const i1 = i;
+  const i2 = i + 1;
+  const i3 = min(stns.length - 1, i + 2);
+  const x = _catmullRom(stns[i0].X, stns[i1].X, stns[i2].X, stns[i3].X, t);
+  const z = _catmullRom(stns[i0].Z, stns[i1].Z, stns[i2].Z, stns[i3].Z, t);
+  // Elevation: smoothstep between adjacent stations (smoother than Catmull-Rom for monotone climbs).
+  const y = lerp(stns[i].elev, stns[i+1].elev, smoothstep(0, 1, t));
   return new THREE.Vector3(x, y, z);
 }
 function trackTangent(km){
@@ -239,6 +278,13 @@ function trackFrame(km){
   const r = new THREE.Vector3().crossVectors(t, up).normalize();   // right = tangent × up
   const u = new THREE.Vector3().crossVectors(r, t).normalize();    // local up
   return { p, t, r, u };
+}
+// Centre of the parallel "down" track (opposite-direction running). UK trains
+// run on the LEFT, so trains heading from Skipton to Leeds use the track on
+// the player's right, +TRACK_GAUGE_OFFSET metres along f.r.
+function trackPointOpposite(km){
+  const f = trackFrame(km);
+  return f.p.clone().add(f.r.clone().multiplyScalar(TRACK_GAUGE_OFFSET));
 }
 
 // Speed limit at a given km (mph)
@@ -504,17 +550,19 @@ function buildTrack(){
   const group = new THREE.Group();
   const stepKm = 0.02;          // 20m geometry segments
   const segs = floor(ROUTE.totalKm / stepKm);
+  const railHalf = 0.7175;      // 1435mm gauge / 2
+  const pairCentre = TRACK_GAUGE_OFFSET / 2;          // midpoint between both centrelines
+  const pairHalfW = TRACK_GAUGE_OFFSET / 2 + 1.6;     // ballast extends 1.6m beyond outer rails
 
-  // BALLAST (a textured ribbon)
-  const ballastWidth = 4.4;
+  // BALLAST — single shared ribbon under both tracks
   {
     const positions = [], uvs = [], indices = [];
     let vi = 0;
     for (let i = 0; i <= segs; i++){
       const km = i * stepKm;
       const f = trackFrame(km);
-      const left  = f.p.clone().add(f.r.clone().multiplyScalar(-ballastWidth/2)).add(new THREE.Vector3(0,-0.3,0));
-      const right = f.p.clone().add(f.r.clone().multiplyScalar( ballastWidth/2)).add(new THREE.Vector3(0,-0.3,0));
+      const left  = f.p.clone().add(f.r.clone().multiplyScalar(pairCentre - pairHalfW)).add(new THREE.Vector3(0,-0.3,0));
+      const right = f.p.clone().add(f.r.clone().multiplyScalar(pairCentre + pairHalfW)).add(new THREE.Vector3(0,-0.3,0));
       positions.push(left.x,left.y,left.z, right.x,right.y,right.z);
       uvs.push(0, km*8, 1, km*8);
       if (i<segs){
@@ -530,17 +578,20 @@ function buildTrack(){
     group.add(new THREE.Mesh(g, m));
   }
 
-  // RAILS — two parallel rails, modest cross-section
+  // RAILS — four in total (two per track). Player drives the LEFT track (UK
+  // running convention); the opposite-direction track sits +TRACK_GAUGE_OFFSET m
+  // along f.r. Each rail is laid as an extrusion along the curved centreline.
   const rg = new THREE.Group();
-  const railHalf = 0.7175;       // 1435mm gauge / 2
-  function buildRail(offsetSign){
+  function buildRail(centreOffset, signRail){
     const pts = [];
     const stepRail = 0.05;       // tighter for smooth highlights
     const railSegs = floor(ROUTE.totalKm / stepRail);
     for (let i = 0; i <= railSegs; i++){
       const km = i * stepRail;
       const f = trackFrame(km);
-      const p = f.p.clone().add(f.r.clone().multiplyScalar(offsetSign * railHalf)).add(new THREE.Vector3(0,-0.10,0));
+      const p = f.p.clone()
+        .add(f.r.clone().multiplyScalar(centreOffset + signRail * railHalf))
+        .add(new THREE.Vector3(0, -0.10, 0));
       pts.push(p);
     }
     const path = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.5);
@@ -556,12 +607,19 @@ function buildTrack(){
     const mat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, metalness: 0.85, roughness: 0.35 });
     return new THREE.Mesh(geom, mat);
   }
-  rg.add(buildRail(-1));
-  rg.add(buildRail( 1));
+  // Player's track (centre at lateral 0)
+  rg.add(buildRail(0,                 -1));
+  rg.add(buildRail(0,                  1));
+  // Opposite-direction track (centre at lateral +TRACK_GAUGE_OFFSET)
+  rg.add(buildRail(TRACK_GAUGE_OFFSET, -1));
+  rg.add(buildRail(TRACK_GAUGE_OFFSET,  1));
   group.add(rg);
 
-  // SLEEPERS — instanced boxes at 0.6m spacing
-  const sleeperGeo = new THREE.BoxGeometry(2.6, 0.18, 0.22);
+  // SLEEPERS — single wide sleeper across both tracks (~6.6m). UK double-track
+  // typically uses separate sleepers per track, but a shared width reads fine
+  // and halves the instance count.
+  const sleeperWidth = TRACK_GAUGE_OFFSET + 2.6;
+  const sleeperGeo = new THREE.BoxGeometry(sleeperWidth, 0.18, 0.22);
   const sleeperMat = new THREE.MeshStandardMaterial({ map: texSleeper, roughness: 1.0 });
   const sleeperSpacing = 0.65;
   const totalM = ROUTE.totalKm * KM;
@@ -571,7 +629,9 @@ function buildTrack(){
   for (let i = 0; i < count; i++){
     const km = (i * sleeperSpacing) / KM;
     const f = trackFrame(km);
-    tmp.position.copy(f.p).add(new THREE.Vector3(0,-0.20,0));
+    tmp.position.copy(f.p)
+      .add(f.r.clone().multiplyScalar(pairCentre))   // centre on pair midpoint
+      .add(new THREE.Vector3(0, -0.20, 0));
     const yaw = Math.atan2(-f.t.x, -f.t.z);
     tmp.rotation.set(0, yaw, 0);
     tmp.updateMatrix();
@@ -589,58 +649,61 @@ scene.add(buildTrack());
 // ============================================================
 function buildOHLE(){
   const group = new THREE.Group();
-  const spacing = 60;            // typical 50–70m
+  const spacing = 60;
   const totalM = ROUTE.totalKm * KM;
   const count = floor(totalM / spacing);
 
-  // Pole geometry — H-section approximated by a box
   const poleGeo = new THREE.BoxGeometry(0.18, 6.5, 0.18);
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4d54, roughness: 0.7, metalness: 0.5 });
-  const armGeo  = new THREE.BoxGeometry(4.0, 0.10, 0.10);
+  // Cantilever spans the full pair so we can hang two contact wires from it
+  const armSpan = TRACK_GAUGE_OFFSET + 4.0;
+  const armGeo  = new THREE.BoxGeometry(armSpan, 0.10, 0.10);
 
   const polesL = new THREE.InstancedMesh(poleGeo, poleMat, count);
   const polesR = new THREE.InstancedMesh(poleGeo, poleMat, count);
-  const armsL  = new THREE.InstancedMesh(armGeo,  poleMat, count);
-  const armsR  = new THREE.InstancedMesh(armGeo,  poleMat, count);
+  const arms   = new THREE.InstancedMesh(armGeo,  poleMat, count);
   const tmp = new THREE.Object3D();
 
-  // Contact wire vertices (LineSegments)
+  // Two contact wires: one over each track centreline (player track at 0,
+  // opposite track at +TRACK_GAUGE_OFFSET).
   const wirePos = [];
+
+  // Poles outside the pair: -2.6 from player track, +TRACK_GAUGE_OFFSET+2.6 right of opposite track
+  const poleLeftLat  = -2.6;
+  const poleRightLat = TRACK_GAUGE_OFFSET + 2.6;
+  const armCentreLat = TRACK_GAUGE_OFFSET / 2;
 
   for (let i = 0; i < count; i++){
     const km = (i * spacing) / KM;
     const f = trackFrame(km);
     const yaw = Math.atan2(-f.t.x, -f.t.z);
-    // left pole
-    const lp = f.p.clone().add(f.r.clone().multiplyScalar(-2.6)).add(new THREE.Vector3(0, 3.25, 0));
+    const lp = f.p.clone().add(f.r.clone().multiplyScalar(poleLeftLat)).add(new THREE.Vector3(0, 3.25, 0));
     tmp.position.copy(lp); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
     polesL.setMatrixAt(i, tmp.matrix);
-    // right pole
-    const rp = f.p.clone().add(f.r.clone().multiplyScalar( 2.6)).add(new THREE.Vector3(0, 3.25, 0));
+    const rp = f.p.clone().add(f.r.clone().multiplyScalar(poleRightLat)).add(new THREE.Vector3(0, 3.25, 0));
     tmp.position.copy(rp); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
     polesR.setMatrixAt(i, tmp.matrix);
-    // arms (cantilevers)
-    const armL = lp.clone().add(new THREE.Vector3(0, 2.6, 0)).add(f.r.clone().multiplyScalar(1.3));
-    tmp.position.copy(armL); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
-    armsL.setMatrixAt(i, tmp.matrix);
-    const armR = rp.clone().add(new THREE.Vector3(0, 2.6, 0)).add(f.r.clone().multiplyScalar(-1.3));
-    tmp.position.copy(armR); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
-    armsR.setMatrixAt(i, tmp.matrix);
+    // Single full-width arm at the pair midpoint
+    const arm = f.p.clone().add(f.r.clone().multiplyScalar(armCentreLat)).add(new THREE.Vector3(0, 5.85, 0));
+    tmp.position.copy(arm); tmp.rotation.set(0,yaw,0); tmp.updateMatrix();
+    arms.setMatrixAt(i, tmp.matrix);
 
-    // contact wire point above track centreline
-    const cw = f.p.clone().add(new THREE.Vector3(0, 5.3, 0));
-    if (i > 0) {
+    // Contact wires above each track centreline
+    if (i > 0){
       const km0 = ((i-1) * spacing) / KM;
       const f0 = trackFrame(km0);
-      const cw0 = f0.p.clone().add(new THREE.Vector3(0, 5.3, 0));
-      wirePos.push(cw0.x, cw0.y, cw0.z, cw.x, cw.y, cw.z);
+      const w0a = f0.p.clone().add(new THREE.Vector3(0, 5.3, 0));
+      const w1a = f.p.clone().add(new THREE.Vector3(0, 5.3, 0));
+      const w0b = f0.p.clone().add(f0.r.clone().multiplyScalar(TRACK_GAUGE_OFFSET)).add(new THREE.Vector3(0, 5.3, 0));
+      const w1b = f.p.clone().add(f.r.clone().multiplyScalar(TRACK_GAUGE_OFFSET)).add(new THREE.Vector3(0, 5.3, 0));
+      wirePos.push(w0a.x, w0a.y, w0a.z, w1a.x, w1a.y, w1a.z);
+      wirePos.push(w0b.x, w0b.y, w0b.z, w1b.x, w1b.y, w1b.z);
     }
   }
   polesL.instanceMatrix.needsUpdate = true;
   polesR.instanceMatrix.needsUpdate = true;
-  armsL.instanceMatrix.needsUpdate  = true;
-  armsR.instanceMatrix.needsUpdate  = true;
-  group.add(polesL); group.add(polesR); group.add(armsL); group.add(armsR);
+  arms.instanceMatrix.needsUpdate   = true;
+  group.add(polesL); group.add(polesR); group.add(arms);
 
   const wireGeo = new THREE.BufferGeometry();
   wireGeo.setAttribute('position', new THREE.Float32BufferAttribute(wirePos, 3));
@@ -1523,8 +1586,15 @@ function makeNoiseBuffer(ctx, dur){
   return buf;
 }
 function initAudio(){
-  if (AUDIO.initialised) return;
+  if (AUDIO.initialised) {
+    // Browsers may have suspended the context after the gesture window closed.
+    if (AUDIO.ctx && AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume();
+    return;
+  }
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  // Modern browsers create the context in 'suspended' state; resume needs the
+  // current call stack to descend from a user gesture (the START SERVICE click).
+  if (ctx.state === 'suspended') ctx.resume();
   AUDIO.ctx = ctx;
   AUDIO.master = ctx.createGain(); AUDIO.master.gain.value = 0.55; AUDIO.master.connect(ctx.destination);
 
@@ -1941,20 +2011,23 @@ function updateCabAnim(dt){
   // z = a − π/2. So whatever canvas angle we want, we set Z to (a − π/2).
 
   // Speedo (0..100 mph). Sweep starts at canvas 0.75π and spans 1.5π CW.
+  // Texture is uploaded with flipY=true, so vertex angle t corresponds to canvas
+  // angle -t. Solving for the needle rotation that points at canvas angle a
+  // gives z = -π/2 - a.
   const mph = GS.v * MS_TO_MPH;
   const tSpd = clamp(mph / 100, 0, 1);
   const aSpd = (PI*0.75) + tSpd * (PI*1.5);
-  cab.speedoNeedle.rotation.set(-PI/2, 0, aSpd - PI/2);
+  cab.speedoNeedle.rotation.set(-PI/2, 0, -PI/2 - aSpd);
 
   // Brake-cylinder pressure proxy (0..5 bar). Rises with brake notch.
   const pBar = clamp((GS.notch < 0 ? -GS.notch : 0), 0, 5);
   const aP = (PI*0.75) + (pBar / 5) * (PI*1.5);
-  cab.pressNeedle.rotation.set(-PI/2, 0, aP - PI/2);
+  cab.pressNeedle.rotation.set(-PI/2, 0, -PI/2 - aP);
 
   // Main-reservoir pressure (0..12 bar). Sits steady around 9 bar with a wobble.
   const mrBar = 8.8 + sin(GS.serviceTime * 0.6) * 0.15;
   const aMR = (PI*0.75) + (mrBar / 12) * (PI*1.5);
-  cab.mrNeedle.rotation.set(-PI/2, 0, aMR - PI/2);
+  cab.mrNeedle.rotation.set(-PI/2, 0, -PI/2 - aMR);
 
   // Master controller lever — tilt forward/back, plus brief colour flash on change
   const ln = GS.notch / 6;        // -1..+0.66
