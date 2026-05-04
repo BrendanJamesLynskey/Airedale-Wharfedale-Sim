@@ -1126,14 +1126,17 @@ function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowF
   );
   face.rotation.x = -PI/2;
   grp.add(face);
-  // Needle — flat triangle
+  // Needle — flat triangle. Wider than a real instrument needle so it reads from
+  // the driving position (the gauges are ~1.5m from the camera and only a few
+  // hundred screen pixels across). MeshBasicMaterial ignores scene lighting so
+  // the red is always saturated, not dimmed by the cab's hemisphere/ambient mix.
   const needleShape = new THREE.Shape();
-  needleShape.moveTo(-radius*0.04, 0);
-  needleShape.lineTo(radius*0.04, 0);
-  needleShape.lineTo(0, radius * 0.78);
-  needleShape.lineTo(-radius*0.04, 0);
+  needleShape.moveTo(-radius*0.10, -radius*0.08);
+  needleShape.lineTo( radius*0.10, -radius*0.08);
+  needleShape.lineTo(0, radius * 0.82);
+  needleShape.lineTo(-radius*0.10, -radius*0.08);
   const needleGeo = new THREE.ShapeGeometry(needleShape);
-  const needle = new THREE.Mesh(needleGeo, new THREE.MeshStandardMaterial({ color: 0xff2020, roughness: 0.4, metalness: 0.2, side: THREE.DoubleSide }));
+  const needle = new THREE.Mesh(needleGeo, new THREE.MeshBasicMaterial({ color: 0xd11820, side: THREE.DoubleSide }));
   needle.rotation.x = -PI/2;
   needle.position.y = 0.012;
   grp.add(needle);
@@ -1925,28 +1928,33 @@ function updateHUD(dt){
 // ============================================================
 function updateCabAnim(dt){
   // Each needle is a child of its gauge group, lying flat on the face after a
-  // -π/2 X rotation set at build time. We only ever animate the spin angle (Z),
-  // never the position — earlier code reset position.set() to dashboard-scale
-  // coords each frame, which (because positions are local to the gauge group)
-  // shoved the needle ~1m off the dial.
+  // build-time rotation.x = -π/2. We only ever animate the spin angle (Z),
+  // never position — earlier code reset position.set() to dashboard-scale
+  // coords each frame which, applied in the gauge group's local frame, threw
+  // the needle ~1m off the dial.
+  //
+  // Geometry: CircleGeometry vertices at angle t map to canvas-texture angle t
+  // (with canvas Y down). After face.rotation.x = -π/2, vertex (cos t, sin t,
+  // 0) lands at (cos t, 0, -sin t). For a needle whose tip starts at (0, 0.78r,
+  // 0), applying Rz(z) then Rx(-π/2) puts the tip at (-0.78r sin z, 0,
+  // -0.78r cos z); equating to (0.78r cos a, 0, -0.78r sin a) gives
+  // z = a − π/2. So whatever canvas angle we want, we set Z to (a − π/2).
 
-  // Speedo needle: -135deg at 0 to +135deg at 100 mph (270deg sweep)
+  // Speedo (0..100 mph). Sweep starts at canvas 0.75π and spans 1.5π CW.
   const mph = GS.v * MS_TO_MPH;
   const tSpd = clamp(mph / 100, 0, 1);
-  const angSpd = (-PI*0.75) + tSpd * (PI*1.5);
-  cab.speedoNeedle.rotation.set(-PI/2, 0, -angSpd - PI/2);
+  const aSpd = (PI*0.75) + tSpd * (PI*1.5);
+  cab.speedoNeedle.rotation.set(-PI/2, 0, aSpd - PI/2);
 
-  // Brake-cylinder pressure proxy — rises with brake notch (0..5 bar of a 0..5 dial)
+  // Brake-cylinder pressure proxy (0..5 bar). Rises with brake notch.
   const pBar = clamp((GS.notch < 0 ? -GS.notch : 0), 0, 5);
-  const tP = pBar / 5;
-  const angP = (-PI*0.75) + tP * (PI*1.5);
-  cab.pressNeedle.rotation.set(-PI/2, 0, -angP - PI/2);
+  const aP = (PI*0.75) + (pBar / 5) * (PI*1.5);
+  cab.pressNeedle.rotation.set(-PI/2, 0, aP - PI/2);
 
-  // Main-reservoir pressure — sits steady around 9 bar with a small wobble.
+  // Main-reservoir pressure (0..12 bar). Sits steady around 9 bar with a wobble.
   const mrBar = 8.8 + sin(GS.serviceTime * 0.6) * 0.15;
-  const tMR = clamp(mrBar / 12, 0, 1);
-  const angMR = (PI*0.75) + tMR * (PI*1.5);   // dial sweep is 135°..405° on this face
-  cab.mrNeedle.rotation.set(-PI/2, 0, -angMR - PI/2);
+  const aMR = (PI*0.75) + (mrBar / 12) * (PI*1.5);
+  cab.mrNeedle.rotation.set(-PI/2, 0, aMR - PI/2);
 
   // Master controller lever — tilt forward/back, plus brief colour flash on change
   const ln = GS.notch / 6;        // -1..+0.66
