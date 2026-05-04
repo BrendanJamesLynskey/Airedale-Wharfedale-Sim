@@ -199,7 +199,7 @@ const MPH_TO_MS = 0.44704;
 const MS_TO_MPH = 2.23694;
 const KM = 1000;
 const sin=Math.sin,cos=Math.cos,PI=Math.PI,abs=Math.abs,min=Math.min,max=Math.max,
-      floor=Math.floor,sqrt=Math.sqrt,rand=Math.random;
+      floor=Math.floor,ceil=Math.ceil,sqrt=Math.sqrt,rand=Math.random;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 function smoothstep(a,b,x){const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}
@@ -310,12 +310,30 @@ function nextStation(km){
 // THREE.JS SETUP
 // ============================================================
 const canvas = document.getElementById('gc');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference:'high-performance' });
-// Quality tier — auto-detect mobile to keep frame rate high there, but use high pixel ratio on desktop.
+// Quality tier — auto-detect mobile to keep frame rate high there.
 const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '') || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 const QUALITY = isMobile ? 'mobile' : 'desktop';
-const PIXEL_RATIO = QUALITY === 'mobile' ? min(window.devicePixelRatio || 1, 2) : min(window.devicePixelRatio || 1, 3);
+// Pixel ratio capped at 1.5 — combined with antialias=true, a 4K HiDPI display
+// at devicePixelRatio 2 was creating a >100 MP MSAA framebuffer, which can OOM
+// the GPU process on integrated/Linux drivers and crash the tab.
+const PIXEL_RATIO = min(window.devicePixelRatio || 1, 1.5);
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: !isMobile,            // MSAA off on mobile — too memory-hungry
+  powerPreference: 'high-performance',
+  preserveDrawingBuffer: false,
+});
 renderer.setPixelRatio(PIXEL_RATIO);
+// Recover from GPU process resets gracefully instead of going permanently black.
+canvas.addEventListener('webglcontextlost', e => {
+  e.preventDefault();
+  console.warn('WebGL context lost — pausing render loop');
+  GS.paused = true;
+});
+canvas.addEventListener('webglcontextrestored', () => {
+  console.warn('WebGL context restored');
+  GS.paused = false;
+});
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -618,11 +636,14 @@ function buildTrack(){
   // SLEEPERS — separate sleepers for each track (2.6m each, with the
   // ~1.4m cess gap between them visible). Two InstancedMeshes share geometry.
   const sleeperGeo = new THREE.BoxGeometry(2.6, 0.18, 0.22);
-  const sleeperMat = new THREE.MeshStandardMaterial({ map: texSleeper, roughness: 1.0 });
-  // 0.85m spacing reduces the per-track instance count by ~25% vs 0.65m;
-  // doubling the track also doubled the sleeper count, which on lower-end
-  // GPUs has been observed to OOM the GPU process and crash the tab.
-  const sleeperSpacing = 0.85;
+  // Lambert is unlit-cheap vs Standard PBR. 98k instances × full PBR was a
+  // major contributor to GPU pressure (and observed crashes on weaker GPUs).
+  const sleeperMat = new THREE.MeshLambertMaterial({ map: texSleeper });
+  // 1.30m spacing halves the per-track instance count vs 0.65m and is still
+  // visually plausible at typical view distances. Doubling the track also
+  // doubled the sleeper count, which on lower-end GPUs has been observed to
+  // OOM the GPU process and crash the tab.
+  const sleeperSpacing = 1.30;
   const totalM = ROUTE.totalKm * KM;
   const count = floor(totalM / sleeperSpacing);
   function buildSleeperRow(centreOffset){
@@ -744,106 +765,138 @@ function makeNameBoardTexture(name, code){
 
 function buildStations(){
   const group = new THREE.Group();
+  const platformH = 0.95;
+  const platformW = 3.5;
+  // Sample step for curved platform geometry — 5m gives smooth ribbons even
+  // through the sharper Aire-valley bends.
+  const platformStep = 5.0;
+
   for (const s of ROUTE.stations){
-    const f = trackFrame(s.km);
-    const yaw = Math.atan2(-f.t.x, -f.t.z);
-    const platformH = 0.95;
-    const platformW = 3.5;
     const platLen = s.plat;
-    const sg = new THREE.Group();
-    sg.position.copy(f.p);
-    sg.rotation.y = yaw;
+    const halfKm  = (platLen / 2) / KM;
+    const segs    = max(4, ceil(platLen / platformStep));
 
     function platformAt(side){
       const pg = new THREE.Group();
       const sign = (side === 'L') ? -1 : 1;
-      // 'L' platforms sit outside the player's track; 'R' platforms sit outside
-      // the opposite-direction track. So each platform serves a single track —
-      // the player's train uses the L platform, the opposite-direction train
-      // uses the R platform — exactly as a real two-platform UK station does.
+      // 'L' serves the player's track; 'R' serves the opposite-direction track.
+      // Each platform sits outside its track so the cess between the running
+      // pair stays clear.
       const trackCentre = (side === 'L') ? 0 : TRACK_GAUGE_OFFSET;
-      const offset = trackCentre + sign * (1.8 + platformW/2);
-      // Platform slab
-      const slab = new THREE.Mesh(
-        new THREE.BoxGeometry(platformW, platformH, platLen),
-        new THREE.MeshStandardMaterial({ map: texConcrete, roughness: 0.85 })
-      );
-      slab.position.set(offset, platformH/2, 0);
-      pg.add(slab);
-      // Yellow safety line
-      const yellow = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.25, platLen-2),
-        new THREE.MeshBasicMaterial({ color: 0xffd23a })
-      );
-      yellow.rotation.x = -PI/2;
-      yellow.position.set(offset - sign*(platformW/2 - 0.5), platformH+0.005, 0);
-      pg.add(yellow);
-      // Tactile strip (darker line nearer edge)
-      const tactile = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.10, platLen-2),
-        new THREE.MeshBasicMaterial({ color: 0x2a2a2a })
-      );
-      tactile.rotation.x = -PI/2;
-      tactile.position.set(offset - sign*(platformW/2 - 0.20), platformH+0.006, 0);
-      pg.add(tactile);
+      // Lateral offsets from the line centreline (positive = +f.r direction).
+      const innerLat = trackCentre + sign * 1.8;                   // edge nearest the rails
+      const outerLat = trackCentre + sign * (1.8 + platformW);     // far edge
+      const centreLat = trackCentre + sign * (1.8 + platformW / 2);
+      const yellowLat = trackCentre + sign * (1.8 + 0.50);         // 0.5m back from edge
+      const tactileLat = trackCentre + sign * (1.8 + 0.20);        // 0.2m back from edge
 
-      // Lampposts every 25m
+      // ---- Curved slab top + inner wall, built from trackFrame samples ----
+      const samples = [];
+      for (let i = 0; i <= segs; i++){
+        const km = s.km + (-halfKm) + (i / segs) * (halfKm * 2);
+        samples.push(trackFrame(km));
+      }
+      function ribbon(latA, latB, yA, yB, mat, uvVScale){
+        const positions = [], uvs = [], indices = [];
+        for (let i = 0; i < samples.length; i++){
+          const f = samples[i];
+          const a = f.p.clone().add(f.r.clone().multiplyScalar(latA)).add(new THREE.Vector3(0, yA, 0));
+          const b = f.p.clone().add(f.r.clone().multiplyScalar(latB)).add(new THREE.Vector3(0, yB, 0));
+          positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+          const v = (i / segs) * uvVScale;
+          uvs.push(0, v, 1, v);
+          if (i < samples.length - 1){
+            const k = i * 2;
+            indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+          }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        g.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs, 2));
+        g.setIndex(indices);
+        g.computeVertexNormals();
+        return new THREE.Mesh(g, mat);
+      }
+      // Slab top
+      const concreteMat = new THREE.MeshStandardMaterial({ map: texConcrete, roughness: 0.85 });
+      pg.add(ribbon(innerLat, outerLat, platformH, platformH, concreteMat, platLen / 6));
+      // Slab inner wall (track-facing face)
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x9d9b96, roughness: 0.95 });
+      pg.add(ribbon(innerLat, innerLat, 0, platformH, wallMat, platLen / 6));
+      // Slab outer wall
+      pg.add(ribbon(outerLat, outerLat, 0, platformH, wallMat, platLen / 6));
+      // Slab end caps (at each end, a small triangle/quad would help; skipped for brevity)
+      // Yellow safety line and tactile strip — thin curved ribbons sitting just above the slab
+      const yellowMat  = new THREE.MeshBasicMaterial({ color: 0xffd23a });
+      const tactileMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
+      pg.add(ribbon(yellowLat - sign*0.125, yellowLat + sign*0.125, platformH + 0.005, platformH + 0.005, yellowMat, 1));
+      pg.add(ribbon(tactileLat - sign*0.05, tactileLat + sign*0.05, platformH + 0.006, platformH + 0.006, tactileMat, 1));
+
+      // ---- Lampposts every ~25m, at trackFrame samples ----
       const lampMat = new THREE.MeshStandardMaterial({ color: 0x202020, metalness:0.6, roughness:0.5 });
       const lampHeadMat = new THREE.MeshStandardMaterial({ color: 0xffeebb, emissive: 0xffeebb, emissiveIntensity: 0.7 });
       const lampN = max(2, floor(platLen / 25));
       for (let i = 0; i < lampN; i++){
-        const t = (i + 0.5) / lampN;
-        const z = (t - 0.5) * (platLen - 4);
-        const lg = new THREE.Group();
+        const u = (i + 0.5) / lampN;
+        const km = s.km + (-halfKm) + u * (halfKm * 2);
+        const f = trackFrame(km);
+        const base = f.p.clone().add(f.r.clone().multiplyScalar(centreLat));
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 4.0, 8), lampMat);
-        post.position.set(offset, platformH + 2.0, z);
-        lg.add(post);
+        post.position.copy(base).add(new THREE.Vector3(0, platformH + 2.0, 0));
+        pg.add(post);
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), lampHeadMat);
-        head.position.set(offset, platformH + 4.0, z);
-        lg.add(head);
-        pg.add(lg);
+        head.position.copy(base).add(new THREE.Vector3(0, platformH + 4.0, 0));
+        pg.add(head);
       }
-      // Shelter (a small canopy)
+
+      // ---- Shelter (small canopy) at station centre ----
+      const f0 = trackFrame(s.km);
+      const yawMid = Math.atan2(-f0.t.x, -f0.t.z);
+      const shelterLen = min(platLen * 0.4, 16);
       const shelter = new THREE.Mesh(
-        new THREE.BoxGeometry(platformW*0.8, 0.20, min(platLen*0.4, 16)),
+        new THREE.BoxGeometry(platformW * 0.8, 0.20, shelterLen),
         new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness:0.7, metalness:0.3 })
       );
-      shelter.position.set(offset + sign*0.0, platformH + 2.6, 0);
+      shelter.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 2.6, 0));
+      shelter.rotation.y = yawMid;
       pg.add(shelter);
-      // Shelter posts
       const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
-      [-1,1].forEach(dx=>[-1,1].forEach(dz=>{
+      [-1,1].forEach(dx => [-1,1].forEach(dz => {
         const pst = new THREE.Mesh(postGeo, lampMat);
-        pst.position.set(offset + dx*platformW*0.3, platformH+1.3, dz*min(platLen*0.18, 7));
+        const km = s.km + dz * min(platLen*0.18, 7) / KM;
+        const f = trackFrame(km);
+        pst.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat + dx * platformW * 0.3)).add(new THREE.Vector3(0, platformH + 1.3, 0));
         pg.add(pst);
       }));
-      // Name board
-      const tex = makeNameBoardTexture(s.name, s.code);
-      const board = new THREE.Mesh(
-        new THREE.PlaneGeometry(4.0, 1.0),
-        new THREE.MeshBasicMaterial({ map: tex })
-      );
-      board.position.set(offset, platformH + 1.8, -platLen*0.15);
-      board.rotation.y = sign>0 ? PI : 0;
-      pg.add(board);
-      const board2 = board.clone();
-      board2.position.set(offset, platformH + 1.8, platLen*0.15);
-      pg.add(board2);
 
-      // Stop-car marker — pole-mounted reflective plate at platform centre, plus
-      // a painted yellow "STOP" stripe across the platform so the driver can see
-      // the stopping point from a long way out. The train should halt with its
-      // cab aligned with the marker (game scoring expects GS.km ≈ s.km).
+      // ---- Name boards ----
+      const nameTex = makeNameBoardTexture(s.name, s.code);
+      const nameMat = new THREE.MeshBasicMaterial({ map: nameTex });
+      [-0.15, 0.15].forEach(dz => {
+        const km = s.km + dz * platLen / KM;
+        const f = trackFrame(km);
+        const yaw = Math.atan2(-f.t.x, -f.t.z);
+        const board = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 1.0), nameMat);
+        board.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 1.8, 0));
+        board.rotation.y = yaw + (sign > 0 ? PI : 0);
+        pg.add(board);
+      });
+
+      // ---- Stop-car marker (only where defined). The cab should align with it
+      // so game scoring (which expects GS.km ≈ s.km) rewards a visual match. ----
       if (s.stopMarker){
+        const fM = trackFrame(s.km);
+        const yaw = Math.atan2(-fM.t.x, -fM.t.z);
         const mg = new THREE.Group();
+        mg.position.copy(fM.p).add(fM.r.clone().multiplyScalar(trackCentre + sign * (1.8 + 0.20)));
+        mg.rotation.y = yaw;
         const poleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.6, roughness: 0.5 });
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.9, 10), poleMat);
         pole.position.set(0, platformH + 0.95, 0);
         mg.add(pole);
-        // Plate: large, high-contrast, retro-reflective look
         const c = document.createElement('canvas'); c.width = 256; c.height = 320;
         const cx = c.getContext('2d');
-        cx.fillStyle = '#ffe000'; cx.fillRect(0,0,256,320);                  // yellow background
+        cx.fillStyle = '#ffe000'; cx.fillRect(0,0,256,320);
         cx.strokeStyle = '#0a0a0a'; cx.lineWidth = 12; cx.strokeRect(8,8,240,304);
         cx.fillStyle = '#0a0a0a';
         cx.font = 'bold 150px Orbitron, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
@@ -861,16 +914,13 @@ function buildStations(){
         const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.70, 0.88), plateMat);
         plate.position.set(0, platformH + 1.85, 0);
         mg.add(plate);
-        // Painted yellow stop stripe across the platform at the marker position.
         const stripe = new THREE.Mesh(
           new THREE.PlaneGeometry(platformW - 0.6, 0.30),
           new THREE.MeshBasicMaterial({ color: 0xffd23a })
         );
         stripe.rotation.x = -PI/2;
-        stripe.position.set(-sign*0.0, platformH + 0.011, 0);   // a hair above slab to avoid z-fight
+        stripe.position.set(sign * (platformW/2 - 0.20), platformH + 0.011, 0);
         mg.add(stripe);
-        // Sit just inboard of the platform's track edge so the cab passes alongside it.
-        mg.position.set(offset - sign*(platformW/2 - 0.20), 0, 0);
         pg.add(mg);
       }
 
@@ -878,13 +928,11 @@ function buildStations(){
     }
 
     if (s.side === 'I'){
-      // Island platform — represent as platform on both sides (slightly inset)
-      sg.add(platformAt('L'));
-      sg.add(platformAt('R'));
+      group.add(platformAt('L'));
+      group.add(platformAt('R'));
     } else {
-      sg.add(platformAt(s.side));
+      group.add(platformAt(s.side));
     }
-    group.add(sg);
   }
   return group;
 }
