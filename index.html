@@ -1924,19 +1924,29 @@ function updateHUD(dt){
 // CAB ANIMATION — needles, lever, wipers, door LED
 // ============================================================
 function updateCabAnim(dt){
+  // Each needle is a child of its gauge group, lying flat on the face after a
+  // -π/2 X rotation set at build time. We only ever animate the spin angle (Z),
+  // never the position — earlier code reset position.set() to dashboard-scale
+  // coords each frame, which (because positions are local to the gauge group)
+  // shoved the needle ~1m off the dial.
+
   // Speedo needle: -135deg at 0 to +135deg at 100 mph (270deg sweep)
   const mph = GS.v * MS_TO_MPH;
   const tSpd = clamp(mph / 100, 0, 1);
   const angSpd = (-PI*0.75) + tSpd * (PI*1.5);
-  cab.speedoNeedle.rotation.set(-PI*0.45, 0, -angSpd - PI/2);
-  cab.speedoNeedle.position.set(-0.45, 1.275, -1.045);
+  cab.speedoNeedle.rotation.set(-PI/2, 0, -angSpd - PI/2);
 
-  // Pressure gauge: brake-cylinder pressure proxy — rises with brake notch
-  const pBar = clamp((GS.notch < 0 ? -GS.notch : 0) / 5 * 5, 0, 5);  // 0..5 bar
-  const tP = pBar / 8;
+  // Brake-cylinder pressure proxy — rises with brake notch (0..5 bar of a 0..5 dial)
+  const pBar = clamp((GS.notch < 0 ? -GS.notch : 0), 0, 5);
+  const tP = pBar / 5;
   const angP = (-PI*0.75) + tP * (PI*1.5);
-  cab.pressNeedle.rotation.set(-PI*0.45, 0, -angP - PI/2);
-  cab.pressNeedle.position.set(0.45, 1.275, -1.045);
+  cab.pressNeedle.rotation.set(-PI/2, 0, -angP - PI/2);
+
+  // Main-reservoir pressure — sits steady around 9 bar with a small wobble.
+  const mrBar = 8.8 + sin(GS.serviceTime * 0.6) * 0.15;
+  const tMR = clamp(mrBar / 12, 0, 1);
+  const angMR = (PI*0.75) + tMR * (PI*1.5);   // dial sweep is 135°..405° on this face
+  cab.mrNeedle.rotation.set(-PI/2, 0, -angMR - PI/2);
 
   // Master controller lever — tilt forward/back, plus brief colour flash on change
   const ln = GS.notch / 6;        // -1..+0.66
