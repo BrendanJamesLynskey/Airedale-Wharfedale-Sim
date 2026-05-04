@@ -132,10 +132,12 @@ const ROUTE = {
   service: '2L42 LEEDS → SKIPTON',
   totalKm: 41.8,
   // Stations: km along, name, code, platformLen(m), side('L'|'R'|'I' island), elevation(m)
+  // stopMarker: optional label rendered as a "stop car marker" on the platform.
   stations: [
     { km:  0.00, name: 'Leeds',                code: 'LDS', plat: 250, side: 'I', elev: 50, plat_no: 13 },
+    { km:  6.40, name: 'Kirkstall Forge',      code: 'KLF', plat: 130, side: 'L', elev: 60 },
     { km: 10.60, name: 'Apperley Bridge',      code: 'APY', plat: 100, side: 'L', elev: 80 },
-    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80 },
+    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80, stopMarker: '4 CAR' },
     { km: 15.65, name: 'Saltaire',             code: 'SAE', plat: 110, side: 'L', elev: 80 },
     { km: 19.50, name: 'Bingley',              code: 'BIY', plat: 130, side: 'L', elev: 90 },
     { km: 20.85, name: 'Crossflatts',          code: 'CFL', plat:  95, side: 'L', elev: 95 },
@@ -145,7 +147,7 @@ const ROUTE = {
     { km: 41.80, name: 'Skipton',              code: 'SKI', plat: 200, side: 'I', elev: 120 },
   ],
   // Schedule (cumulative seconds from departure Leeds)
-  schedule: [0, 720, 1020, 1140, 1380, 1500, 1740, 1920, 2100, 2580],
+  schedule: [0, 480, 720, 1020, 1140, 1380, 1500, 1740, 1920, 2100, 2580],
   // Speed limit segments: { kmStart, mph }
   limits: [
     { km:  0.00, mph: 25 },   // Leeds station throat
@@ -754,6 +756,51 @@ function buildStations(){
       const board2 = board.clone();
       board2.position.set(offset, platformH + 1.8, platLen*0.15);
       pg.add(board2);
+
+      // Stop-car marker — pole-mounted reflective plate at platform centre, plus
+      // a painted yellow "STOP" stripe across the platform so the driver can see
+      // the stopping point from a long way out. The train should halt with its
+      // cab aligned with the marker (game scoring expects GS.km ≈ s.km).
+      if (s.stopMarker){
+        const mg = new THREE.Group();
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.6, roughness: 0.5 });
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.9, 10), poleMat);
+        pole.position.set(0, platformH + 0.95, 0);
+        mg.add(pole);
+        // Plate: large, high-contrast, retro-reflective look
+        const c = document.createElement('canvas'); c.width = 256; c.height = 320;
+        const cx = c.getContext('2d');
+        cx.fillStyle = '#ffe000'; cx.fillRect(0,0,256,320);                  // yellow background
+        cx.strokeStyle = '#0a0a0a'; cx.lineWidth = 12; cx.strokeRect(8,8,240,304);
+        cx.fillStyle = '#0a0a0a';
+        cx.font = 'bold 150px Orbitron, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+        const parts = s.stopMarker.split(' ');
+        cx.fillText(parts[0], 128, 110);
+        if (parts[1]){
+          cx.font = 'bold 80px Orbitron, sans-serif';
+          cx.fillText(parts[1], 128, 232);
+        }
+        const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+        const plateMat = new THREE.MeshStandardMaterial({
+          map: tex, emissive: 0x808080, emissiveMap: tex, emissiveIntensity: 0.45,
+          side: THREE.DoubleSide, roughness: 0.45,
+        });
+        const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.70, 0.88), plateMat);
+        plate.position.set(0, platformH + 1.85, 0);
+        mg.add(plate);
+        // Painted yellow stop stripe across the platform at the marker position.
+        const stripe = new THREE.Mesh(
+          new THREE.PlaneGeometry(platformW - 0.6, 0.30),
+          new THREE.MeshBasicMaterial({ color: 0xffd23a })
+        );
+        stripe.rotation.x = -PI/2;
+        stripe.position.set(-sign*0.0, platformH + 0.011, 0);   // a hair above slab to avoid z-fight
+        mg.add(stripe);
+        // Sit just inboard of the platform's track edge so the cab passes alongside it.
+        mg.position.set(offset - sign*(platformW/2 - 0.20), 0, 0);
+        pg.add(mg);
+      }
+
       return pg;
     }
 

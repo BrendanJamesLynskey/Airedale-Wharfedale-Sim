@@ -2,7 +2,7 @@
 
 A browser-based train driver simulator for the Airedale and Wharfedale lines
 in West Yorkshire, England. v1 covers the full **Leeds → Skipton** Airedale
-service (10 stations, 41.8 km) driving a **British Rail Class 333** EMU.
+service (11 stations, 41.8 km) driving a **British Rail Class 333** EMU.
 
 [Play it here](https://brendanjameslynskey.github.io/Airedale-Wharfedale-Sim/)
 
@@ -13,15 +13,19 @@ service (10 stations, 41.8 km) driving a **British Rail Class 333** EMU.
 | # | Station | Code | km | Sched |
 |---|---------|------|----|-------|
 | 1 | Leeds | LDS | 0.00 | 00:00 |
-| 2 | Apperley Bridge | APY | 10.60 | 12:00 |
-| 3 | Shipley | SHY | 14.45 | 17:00 |
-| 4 | Saltaire | SAE | 15.65 | 19:00 |
-| 5 | Bingley | BIY | 19.50 | 23:00 |
-| 6 | Crossflatts | CFL | 20.85 | 25:00 |
-| 7 | Keighley | KEI | 25.45 | 29:00 |
-| 8 | Steeton & Silsden | SON | 28.55 | 32:00 |
-| 9 | Cononley | CEY | 32.50 | 35:00 |
-| 10 | Skipton | SKI | 41.80 | 43:00 |
+| 2 | Kirkstall Forge | KLF | 6.40 | 08:00 |
+| 3 | Apperley Bridge | APY | 10.60 | 12:00 |
+| 4 | Shipley | SHY | 14.45 | 17:00 |
+| 5 | Saltaire | SAE | 15.65 | 19:00 |
+| 6 | Bingley | BIY | 19.50 | 23:00 |
+| 7 | Crossflatts | CFL | 20.85 | 25:00 |
+| 8 | Keighley | KEI | 25.45 | 29:00 |
+| 9 | Steeton & Silsden | SON | 28.55 | 32:00 |
+| 10 | Cononley | CEY | 32.50 | 35:00 |
+| 11 | Skipton | SKI | 41.80 | 43:00 |
+
+Shipley is signed with a **4 CAR stop marker** (yellow plate + painted stripe on
+the platform). Halt with the cab beside the marker for a perfect stop.
 
 ## Cab Controls
 
