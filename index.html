@@ -443,39 +443,46 @@ const texTarmac = noiseTexture(256, (u,v)=>{
 // TERRAIN — large plane following the route corridor
 // ============================================================
 function buildTerrain(){
-  // We build segmented strips of grass either side of the track centreline,
-  // following the curved path. This avoids a giant flat plane fighting fog/perspective.
+  // Multi-column strip following the track. Earlier the strip had only two vertices
+  // per km (left and right edges) with ±7m of sinusoidal undulation added equally to
+  // both — which lifted the *entire* transverse line above the rails at certain km,
+  // burying the track in grass. Now lateral columns are scaled so that columns near
+  // the track stay flat (just below the ballast), and undulation only takes effect
+  // far away, giving distant rolling hills without ever swallowing the track.
   const group = new THREE.Group();
   const totalKm = ROUTE.totalKm;
-  const stepKm = 0.05;            // 50m segments
-  const halfWidth = 350;          // 350m either side of track
+  const stepKm = 0.05;
+  const halfWidth = 350;
   const segs = floor(totalKm / stepKm);
 
-  const positions = [];
-  const uvs = [];
-  const indices = [];
+  // Lateral offsets in metres. Inner ±6m sits flat just outside the ballast shoulder.
+  const cols = [-halfWidth, -120, -30, -6, 6, 30, 120, halfWidth];
+  const ncol = cols.length;
+
+  const positions = [], uvs = [], indices = [];
   let vi = 0;
 
   for (let i = 0; i <= segs; i++){
     const km = i * stepKm;
     const f = trackFrame(km);
-    const left  = f.p.clone().add(f.r.clone().multiplyScalar(-halfWidth));
-    const right = f.p.clone().add(f.r.clone().multiplyScalar( halfWidth));
-    // Slight terrain undulation for visual interest, falling away from the line
-    const undL = sin(km*0.3)*4 + cos(km*0.7)*3;
-    const undR = sin(km*0.4+1)*4 + cos(km*0.6+0.5)*3;
-    left.y  += undL - 0.5;
-    right.y += undR - 0.5;
-    // Drop terrain slightly below track for ballast crown to read
-    left.y  -= 0.6;
-    right.y -= 0.6;
-    positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
-    uvs.push(0, km, 1, km);
-    if (i < segs){
-      const a = vi, b = vi+1, c = vi+2, d = vi+3;
-      indices.push(a,c,b, b,c,d);
+    for (let j = 0; j < ncol; j++){
+      const lat = cols[j];
+      const lf  = abs(lat) / halfWidth;                  // 0 near track, 1 at far edge
+      const und = (sin(km*0.3 + lat*0.01)*3.5 + cos(km*0.7 + lat*0.005)*2.0) * lf;
+      const p = f.p.clone().add(f.r.clone().multiplyScalar(lat));
+      p.y += und - 0.6;                                  // sit just below ballast
+      positions.push(p.x, p.y, p.z);
+      const u = (lat + halfWidth) / (2 * halfWidth);
+      uvs.push(u, km);
     }
-    vi += 2;
+    if (i < segs){
+      const a = vi, b = vi + ncol;
+      for (let j = 0; j < ncol - 1; j++){
+        indices.push(a+j, b+j, a+j+1);
+        indices.push(a+j+1, b+j, b+j+1);
+      }
+    }
+    vi += ncol;
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -483,8 +490,7 @@ function buildTerrain(){
   g.setIndex(indices);
   g.computeVertexNormals();
   const m = new THREE.MeshStandardMaterial({ map: texGrass, roughness: 0.95, metalness: 0.0, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(g, m);
-  group.add(mesh);
+  group.add(new THREE.Mesh(g, m));
   return group;
 }
 scene.add(buildTerrain());
