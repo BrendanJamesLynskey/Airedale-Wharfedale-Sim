@@ -61,7 +61,7 @@ On mobile, on-screen pads provide power, brake, horn, AWS reset and pause.
 - All scenery, track, OHLE, signals, stations, cab and instruments are **procedurally built in code** — no external image or model assets ship with the repo, so there are no asset licensing complications.
 - All audio is **synthesised in the browser via WebAudio** (traction whine, brake hiss, AWS bell/buzzer, two-tone horn). Hooks in the audio code allow real Freesound CC-licensed recordings to be slotted in later.
 - Designed to run on desktop and mobile (touch overlay, responsive HUD).
-- Route geometry is approximated for v1 — gradient profile and station spacings are accurate to OpenStreetMap data, but track curvature and lineside features are stylised.
+- Route geometry follows the real Airedale Line — station GPS positions plus ~10 intermediate shape points are projected (equirectangular, rotated to the mean Leeds→Skipton bearing) and interpolated with Catmull-Rom curves. Shape-point coordinates are educated approximations of the Aire valley meander; refine with OSM way data for higher fidelity. Gradient profile and lineside features remain stylised.
 
 ## Roadmap
 

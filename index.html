@@ -227,16 +227,54 @@ const ROUTE_BEARING_DEG = 305;          // Leeds → Skipton bearing, degrees tr
 const ROUTE_BEARING = ROUTE_BEARING_DEG * Math.PI / 180;
 const _cosBR = Math.cos(ROUTE_BEARING - Math.PI/2);
 const _sinBR = Math.sin(ROUTE_BEARING - Math.PI/2);
-ROUTE.stations.forEach(s => {
-  const east  = (s.lon - LEEDS_LON) * LON_TO_M;
-  const north = (s.lat - LEEDS_LAT) * LAT_TO_M;
+function _projectLatLon(lat, lon){
+  const east  = (lon - LEEDS_LON) * LON_TO_M;
+  const north = (lat - LEEDS_LAT) * LAT_TO_M;
   // Rotate (east, north) so the +X axis points along the mean route bearing.
   // For bearing β measured CW from north: forward = (sin β, cos β); right = (cos β, -sin β).
   const sinB = Math.sin(ROUTE_BEARING), cosB = Math.cos(ROUTE_BEARING);
-  s.X = east * sinB + north * cosB;
-  s.Z = east * cosB - north * sinB;
-});
+  return { X: east * sinB + north * cosB, Z: east * cosB - north * sinB };
+}
+ROUTE.stations.forEach(s => { const p = _projectLatLon(s.lat, s.lon); s.X = p.X; s.Z = p.Z; });
 const TRACK_GAUGE_OFFSET = 4.0;         // metres between centrelines (UK double track)
+
+// Intermediate shape waypoints — pure curve-control points that the trackbed
+// passes through but which are not stations. Coordinates are approximations of
+// known curve features along the real Airedale Line (out of Leeds via Burley
+// Park, Aire valley meanders between Apperley/Shipley, Bingley/Crossflatts,
+// and Steeton/Cononley/Skipton). These break up the longer station-to-station
+// stretches so the line genuinely follows the Aire valley rather than smooth-
+// straight-shotting between stations. Refine with OSM way data if available.
+ROUTE.shapePoints = [
+  { km:  2.20, lat: 53.8055, lon: -1.5555 },   // Holbeck/Burley Park — line bends N→NW out of Leeds
+  { km:  4.50, lat: 53.8190, lon: -1.5850 },   // Headingley/Kirkstall approach
+  { km:  8.50, lat: 53.8358, lon: -1.6580 },   // Calverley/Rodley — Aire valley
+  { km: 12.50, lat: 53.8362, lon: -1.7370 },   // Apperley → Shipley meander
+  { km: 17.50, lat: 53.8438, lon: -1.8125 },   // Saltaire → Bingley along Aire
+  { km: 23.00, lat: 53.8588, lon: -1.8780 },   // Crossflatts → Keighley
+  { km: 27.00, lat: 53.8810, lon: -1.9270 },   // Keighley → Steeton, post-tunnel valley
+  { km: 30.50, lat: 53.9105, lon: -1.9620 },   // Steeton → Cononley
+  { km: 35.00, lat: 53.9430, lon: -1.9925 },   // Cononley → Skipton — broad valley
+  { km: 38.50, lat: 53.9525, lon: -2.0060 },   // Skipton approach
+];
+
+// Combined route points (stations + shape) for curve interpolation. The
+// existing trackPoint logic just needs (km, X, Z, elev) per control point —
+// shape points get an interpolated elevation between bracketing stations.
+const routePts = (function buildRoutePts(){
+  const stns = ROUTE.stations;
+  const out = stns.map(s => ({ km: s.km, X: s.X, Z: s.Z, elev: s.elev }));
+  for (const sp of ROUTE.shapePoints){
+    const p = _projectLatLon(sp.lat, sp.lon);
+    let i = 0;
+    while (i < stns.length - 1 && stns[i+1].km <= sp.km) i++;
+    const lo = stns[i], hi = stns[Math.min(i+1, stns.length-1)];
+    const t = lo.km === hi.km ? 0 : (sp.km - lo.km) / (hi.km - lo.km);
+    out.push({ km: sp.km, X: p.X, Z: p.Z, elev: lerp(lo.elev, hi.elev, smoothstep(0, 1, t)) });
+  }
+  out.sort((a, b) => a.km - b.km);
+  return out;
+})();
 
 function _catmullRom(p0, p1, p2, p3, t){
   const t2 = t*t, t3 = t2*t;
@@ -250,22 +288,22 @@ function _catmullRom(p0, p1, p2, p3, t){
 }
 
 function trackPoint(km){
-  const stns = ROUTE.stations;
+  const pts = routePts;
   // Find segment [i, i+1]
   let i = 0;
-  for (; i < stns.length - 2; i++){
-    if (km < stns[i+1].km) break;
+  for (; i < pts.length - 2; i++){
+    if (km < pts[i+1].km) break;
   }
-  i = clamp(i, 0, stns.length - 2);
-  const t = clamp((km - stns[i].km) / (stns[i+1].km - stns[i].km), 0, 1);
+  i = clamp(i, 0, pts.length - 2);
+  const t = clamp((km - pts[i].km) / (pts[i+1].km - pts[i].km), 0, 1);
   const i0 = max(0, i - 1);
   const i1 = i;
   const i2 = i + 1;
-  const i3 = min(stns.length - 1, i + 2);
-  const x = _catmullRom(stns[i0].X, stns[i1].X, stns[i2].X, stns[i3].X, t);
-  const z = _catmullRom(stns[i0].Z, stns[i1].Z, stns[i2].Z, stns[i3].Z, t);
-  // Elevation: smoothstep between adjacent stations (smoother than Catmull-Rom for monotone climbs).
-  const y = lerp(stns[i].elev, stns[i+1].elev, smoothstep(0, 1, t));
+  const i3 = min(pts.length - 1, i + 2);
+  const x = _catmullRom(pts[i0].X, pts[i1].X, pts[i2].X, pts[i3].X, t);
+  const z = _catmullRom(pts[i0].Z, pts[i1].Z, pts[i2].Z, pts[i3].Z, t);
+  // Elevation: smoothstep between adjacent control points (smoother than Catmull-Rom for monotone climbs).
+  const y = lerp(pts[i].elev, pts[i+1].elev, smoothstep(0, 1, t));
   return new THREE.Vector3(x, y, z);
 }
 function trackTangent(km){
@@ -2337,7 +2375,7 @@ function togglePause(){
 }
 
 // Expose module-scope state for browser-console debugging.
-window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD };
+window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts };
 
 // Boot
 buildMenuList();
