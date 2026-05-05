@@ -798,6 +798,12 @@ function buildStations(){
       }
       function ribbon(latA, latB, yA, yB, mat, uvVScale){
         const positions = [], uvs = [], indices = [];
+        // Triangle winding depends on which side of the centreline this ribbon
+        // is on: the right platform has sign=+1 which makes latA<latB (relative
+        // to f.r), reversing the cross-product direction. Without flipping the
+        // index order, the slab top's normal would face DOWN for the right
+        // platform and back-face culling would hide it from the player above.
+        const flip = sign > 0;
         for (let i = 0; i < samples.length; i++){
           const f = samples[i];
           const a = f.p.clone().add(f.r.clone().multiplyScalar(latA)).add(new THREE.Vector3(0, yA, 0));
@@ -807,7 +813,11 @@ function buildStations(){
           uvs.push(0, v, 1, v);
           if (i < samples.length - 1){
             const k = i * 2;
-            indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+            if (flip){
+              indices.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+            } else {
+              indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+            }
           }
         }
         const g = new THREE.BufferGeometry();
