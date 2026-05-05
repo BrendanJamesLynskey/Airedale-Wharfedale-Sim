@@ -46,6 +46,7 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 #tp-brk-dn{right:6vw;bottom:13vh;width:14vw;max-width:90px;height:9vh;max-height:64px;}
 #tp-horn{left:50%;transform:translateX(-50%);bottom:1.5vh;width:18vw;max-width:130px;height:8vh;max-height:54px;}
 #tp-aws{right:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(255,170,0,0.18);}
+#tp-dsd{right:6vw;top:14vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(255,80,80,0.18);}
 #tp-pause{left:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;}
 
 /* Pause overlay */
@@ -102,6 +103,7 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 <div id="touch">
   <div class="pad" id="tp-pause">‖ PAUSE</div>
   <div class="pad" id="tp-aws">AWS</div>
+  <div class="pad" id="tp-dsd">DSD</div>
   <div class="pad" id="tp-pwr-up">PWR ▲</div>
   <div class="pad" id="tp-pwr-dn">PWR ▼</div>
   <div class="pad" id="tp-brk-up">BRK ▲</div>
@@ -1880,7 +1882,8 @@ bindPad('tp-pwr-dn', ()=>bumpNotch(-1));
 bindPad('tp-brk-up', ()=>bumpNotch(-1));
 bindPad('tp-brk-dn', ()=>bumpNotch(+1));
 bindPad('tp-horn',   ()=>{ GS.horn = true; GS.hornHigh = true; }, ()=>{ GS.horn = false; });
-bindPad('tp-aws',    ()=>{ awsReset(); dsdReset(); });
+bindPad('tp-aws',    ()=>{ awsReset(); });
+bindPad('tp-dsd',    ()=>{ dsdReset(); });
 bindPad('tp-pause',  ()=>{ togglePause(); });
 
 // Detect touch device
