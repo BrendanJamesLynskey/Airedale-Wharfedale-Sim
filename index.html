@@ -2180,22 +2180,46 @@ canvas.addEventListener('pointermove', e=>{
   }
 });
 
+// Speed-driven motion cues. Judder amplitude grows quadratically with speed so
+// it stays imperceptible at low speed and noticeable (but not derailment-like)
+// at line speed. FOV widens slightly with speed for a "rushing in" feeling.
+const SPEED_REF = 33.5;          // m/s ≈ 75 mph (line speed) — normalises speed to 0..1
+const JUDDER_MAX = 0.015;        // peak amplitude (m) at line speed
+const FOV_BASE = 62;
+const FOV_GAIN = 6;              // degrees added at line speed
 function placeCamera(){
   const f = trackFrame(GS.km);
-  camRig.position.copy(f.p);
+  const speedFactor = clamp(GS.v / SPEED_REF, 0, 1);
+  const t = clock.getElapsedTime();
+  // Multi-frequency sum-of-sines gives smooth pseudo-random ride feel without
+  // an RNG. Frequencies in the 5–14 Hz band so the cab "buzzes" rather than
+  // "rocks" — train suspension on jointed/welded rail at speed.
+  const amp = speedFactor * speedFactor * JUDDER_MAX;
+  const judderLat = (Math.sin(t * 6.1) + Math.sin(t * 11.3) * 0.6) * amp;
+  const judderY   = (Math.sin(t * 8.4) * 0.7 + Math.sin(t * 13.7) * 0.4) * amp;
+  // Apply judder in world coords: lateral along f.r, vertical along world Y.
+  const judder = f.r.clone().multiplyScalar(judderLat).add(new THREE.Vector3(0, judderY, 0));
+  camRig.position.copy(f.p).add(judder);
   // camRig is a plain Object3D, not a Camera. For non-camera Object3D, lookAt(target)
   // orients +Z at the target — but the camera child looks down -Z, which would face
   // BACKWARD along the route. Pass the opposite point so rig's +Z is -tangent and the
-  // camera's -Z is +tangent (forward along the track).
-  camRig.lookAt(f.p.clone().sub(f.t));
+  // camera's -Z is +tangent (forward along the track). Subtract f.t from the JUDDERED
+  // rig position so the look direction stays parallel to f.t (no judder-induced tilt).
+  camRig.lookAt(camRig.position.clone().sub(f.t));
   // Camera local rotation (player look) layered on top
   camera.rotation.set(lookPitch, lookYaw, 0);
-  // Cab follows the rig directly. Cab geometry was built with -Z = forward (windscreen),
-  // matching camera convention, so a direct copy is correct.
+  // Cab follows the rig directly (so the cab judders together with the camera —
+  // the WORLD appears to shake from the driver's POV, which is the correct cue).
   cabGroup.position.copy(camRig.position);
   cabGroup.quaternion.copy(camRig.quaternion);
   // Sky tracks camera world position (so we never leave the dome) but keeps world rotation
   camera.getWorldPosition(skyMesh.position);
+  // FOV widens with speed — softened toward target so accel/decel transitions feel smooth.
+  const targetFov = FOV_BASE + FOV_GAIN * speedFactor;
+  if (Math.abs(camera.fov - targetFov) > 0.01){
+    camera.fov = targetFov;
+    camera.updateProjectionMatrix();
+  }
 }
 
 function endOfRoute(){
