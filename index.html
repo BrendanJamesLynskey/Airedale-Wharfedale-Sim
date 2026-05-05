@@ -2357,7 +2357,11 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
   GS.running = true;
   GS.km = 0; GS.v = 0; GS.notch = 0; GS.score = 0;
   GS.serviceTime = 0; GS.nextStationIdx = 1;
-  GS.stopState = 'departed';     // we depart Leeds
+  // Already departing Leeds → en route to the first scheduled stop
+  // (Kirkstall Forge). Using 'departed' here was a bug: the first time the
+  // train exceeded 1 m/s, the state machine treated it as leaving station[1]
+  // and incremented nextStationIdx to 2, silently skipping Kirkstall Forge.
+  GS.stopState = 'enroute';
   showMsg('RIGHT AWAY — SIGNAL OFF — PROCEED', '', 3.0);
 });
 document.getElementById('resumeBtn').addEventListener('click', togglePause);
