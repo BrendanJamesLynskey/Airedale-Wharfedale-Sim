@@ -1132,28 +1132,49 @@ function buildLandmarks(){
       g.add(deck);
       group.add(g);
     } else if (ft.type === 'tunnel'){
-      // Tunnel portal + dark interior
+      // Portal-framed tunnel spanning both tracks. Earlier this was two solid
+      // 10×8×1.5 m boxes — the train drove visibly INTO them rather than through
+      // an opening. Rebuilt as three-piece stone frames (left jamb, right jamb,
+      // lintel) around an opening wide enough for both tracks, with unlit dark
+      // interior walls + ceiling between the two portals so the inside reads as
+      // a real tunnel.
       const g = new THREE.Group();
       g.position.copy(f.p);
       g.rotation.y = yaw;
-      const portalMat = new THREE.MeshStandardMaterial({ color: 0x4a4030, roughness: 0.95 });
-      const portal = new THREE.Mesh(
-        new THREE.BoxGeometry(10, 8, 1.5),
-        portalMat
-      );
-      portal.position.set(0, 4, -ft.len/2 - 1);
-      g.add(portal);
-      // Mouth (dark)
-      const mouth = new THREE.Mesh(
-        new THREE.PlaneGeometry(6, 6),
-        new THREE.MeshBasicMaterial({ color: 0x000000 })
-      );
-      mouth.position.set(0, 3, -ft.len/2 - 0.7);
-      g.add(mouth);
-      // Far portal
-      const portal2 = portal.clone();
-      portal2.position.set(0, 4, ft.len/2 + 1);
-      g.add(portal2);
+      const portalMat   = new THREE.MeshStandardMaterial({ color: 0x4a4030, roughness: 0.95 });
+      const interiorMat = new THREE.MeshBasicMaterial({ color: 0x0d0a08 });    // unlit, always dark
+      // Opening centred between the two tracks so both fit through it.
+      const passLat  = TRACK_GAUGE_OFFSET / 2;   // midpoint between player and opposite tracks
+      const passW    = 12;                       // opening width (lateral)
+      const passH    = 6.5;                      // opening height (rail to lintel)
+      const wallT    = 1.0;                      // jamb / wall thickness
+      const halfW    = passW / 2;
+      const lintelH  = 1.5;
+      const halfLen  = ft.len / 2;
+      function portalFrame(z){
+        const left = new THREE.Mesh(new THREE.BoxGeometry(wallT, passH, wallT), portalMat);
+        left.position.set(passLat - halfW - wallT/2, passH/2, z);
+        g.add(left);
+        const right = new THREE.Mesh(new THREE.BoxGeometry(wallT, passH, wallT), portalMat);
+        right.position.set(passLat + halfW + wallT/2, passH/2, z);
+        g.add(right);
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(passW + 2*wallT, lintelH, wallT), portalMat);
+        lintel.position.set(passLat, passH + lintelH/2, z);
+        g.add(lintel);
+      }
+      portalFrame(-halfLen);   // exit portal (far side from approaching player)
+      portalFrame(+halfLen);   // entry portal (player encounters first)
+      // Interior side walls and ceiling, dark unlit so the tunnel reads as dark
+      // from outside even though the GPU has no shadow mapping.
+      const wallL = new THREE.Mesh(new THREE.BoxGeometry(wallT, passH, ft.len), interiorMat);
+      wallL.position.set(passLat - halfW - wallT/2, passH/2, 0);
+      g.add(wallL);
+      const wallR = new THREE.Mesh(new THREE.BoxGeometry(wallT, passH, ft.len), interiorMat);
+      wallR.position.set(passLat + halfW + wallT/2, passH/2, 0);
+      g.add(wallR);
+      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(passW + 2*wallT, lintelH, ft.len), interiorMat);
+      ceiling.position.set(passLat, passH + lintelH/2, 0);
+      g.add(ceiling);
       group.add(g);
     }
   }
