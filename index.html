@@ -169,10 +169,36 @@ const ROUTE = {
   // Notable lineside features
   features: [
     { km:  4.20, type: 'tunnel', len: 30 },        // Bramley
+    { km: 10.30, type: 'bridge', len: 32 },        // Apperley Bridge — line crosses Aire
+    { km: 14.30, type: 'bridge', len: 26 },        // Shipley Aire crossing
     { km: 15.55, type: 'mill',   side: 'L' },      // Salts Mill (UNESCO)
     { km: 19.30, type: 'viaduct', len: 80 },       // Bingley
     { km: 24.10, type: 'tunnel', len: 100 },       // approach Keighley
     { km: 27.80, type: 'viaduct', len: 50 },
+    { km: 28.40, type: 'bridge', len: 28 },        // Steeton/Silsden Aire crossing
+  ],
+  // River Aire path expressed as lateral offset (metres) from the track centre-
+  // line at given km values. Negative = north of line, positive = south. The
+  // offset crosses zero at bridge km values so the river visibly passes under
+  // the railway exactly at the bridge. Between control points the offset is
+  // smoothstep-interpolated; a small sinusoidal meander is added at render time
+  // so the river bends organically rather than running dead straight.
+  // NOTE: this is a stylised approximation of the Aire valley — the bridge
+  // locations and offsets are educated guesses, not OSM-derived.
+  riverPath: [
+    { km:  0.00, lat: -130 },
+    { km:  4.00, lat:  -90 },
+    { km:  8.00, lat: -110 },
+    { km: 10.30, lat:    0 },   // Apperley Bridge crossing
+    { km: 12.20, lat:   95 },
+    { km: 14.30, lat:    0 },   // Shipley crossing
+    { km: 18.00, lat: -110 },
+    { km: 22.00, lat:  -90 },
+    { km: 26.00, lat: -100 },
+    { km: 28.40, lat:    0 },   // Steeton/Silsden crossing
+    { km: 32.00, lat:  120 },
+    { km: 38.00, lat:  140 },
+    { km: 41.80, lat:  160 },
   ],
 };
 
@@ -344,6 +370,24 @@ function nextLimitDrop(km){
 function nextStation(km){
   for (const s of ROUTE.stations) if (s.km > km + 0.02) return s;
   return null;
+}
+
+// River Aire: lateral offset (in metres along trackFrame.r) at the given km,
+// smoothstep-interpolated between ROUTE.riverPath control points. Sign convention
+// matches trackFrame.r: positive = right of forward (south side); negative = left
+// (north side). Returns null past the route ends so the mesh can stop cleanly.
+function riverLatAt(km){
+  const path = ROUTE.riverPath;
+  if (km <= path[0].km) return path[0].lat;
+  if (km >= path[path.length-1].km) return path[path.length-1].lat;
+  for (let i = 0; i < path.length - 1; i++){
+    const a = path[i], b = path[i+1];
+    if (km >= a.km && km <= b.km){
+      const t = (km - a.km) / (b.km - a.km);
+      return lerp(a.lat, b.lat, smoothstep(0, 1, t));
+    }
+  }
+  return path[0].lat;
 }
 
 // ============================================================
@@ -600,6 +644,83 @@ function buildTerrain(){
   return group;
 }
 scene.add(buildTerrain());
+
+// ============================================================
+// RIVER AIRE — flat blue ribbon following the valley
+// Parametrised by km along the track, with lateral offset from riverLatAt()
+// and a small sinusoidal meander layered on top. Where the offset crosses
+// zero (at bridge km values) the river passes directly under the line, and
+// the corresponding ROUTE.features 'bridge' raises the trackbed above it.
+// ============================================================
+function buildRiver(){
+  const group = new THREE.Group();
+  const stepKm = 0.05;
+  const totalKm = ROUTE.totalKm;
+  const segs = floor(totalKm / stepKm);
+  const halfW = 7;                        // 14 m wide channel
+  // Match buildTerrain's undulation formula so the river surface sits just
+  // above local grade rather than at a fixed Y. The route has real elevation
+  // (Leeds 50m → Skipton 120m), so a fixed Y of e.g. -1.2 placed the water
+  // tens of metres below grade and entirely off-camera. gradeOffset returns
+  // the per-vertex offset relative to local rail height; the caller adds the
+  // current rail elevation to get the absolute water y.
+  const TERRAIN_HALF_W = 350;
+  function gradeOffset(km, lat){
+    const lf = min(1, abs(lat) / TERRAIN_HALF_W);
+    const und = (sin(km*0.3 + lat*0.01)*3.5 + cos(km*0.7 + lat*0.005)*2.0) * lf;
+    return und - 0.6;
+  }
+  const positions = [], uvs = [], indices = [];
+  for (let i = 0; i <= segs; i++){
+    const km = i * stepKm;
+    const f = trackFrame(km);
+    const baseLat = riverLatAt(km);
+    // Organic meander — amplitude tapered near zero crossings so the river
+    // still arrives perpendicular at bridge points rather than skewed.
+    const tapered = clamp(abs(baseLat) / 40, 0, 1);
+    const meander = sin(km * 0.9) * 18 * tapered + cos(km * 0.45) * 8 * tapered;
+    const lat = baseLat + meander;
+    const c = f.p.clone().add(f.r.clone().multiplyScalar(lat));
+    const yA = c.y + gradeOffset(km, lat - halfW) + 0.05;
+    const yB = c.y + gradeOffset(km, lat + halfW) + 0.05;
+    const a = c.clone().add(f.r.clone().multiplyScalar(-halfW));
+    const b = c.clone().add(f.r.clone().multiplyScalar(+halfW));
+    a.y = yA; b.y = yB;
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    uvs.push(0, km, 1, km);
+    if (i < segs){
+      const k = i * 2;
+      indices.push(k, k+1, k+2, k+1, k+3, k+2);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs, 2));
+  g.setIndex(indices);
+  g.computeVertexNormals();
+  // MeshBasic (unlit) keeps the water a solid readable blue irrespective of
+  // the ribbon's normal direction; computeVertexNormals can leave the face
+  // pointing downward depending on the local trackFrame.r winding, which
+  // would make a Standard-lit material almost black. polygonOffset biases the
+  // mesh toward the camera so it reads cleanly above the grass terrain.
+  const m = new THREE.MeshBasicMaterial({
+    color: 0x3a6f9a,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    side: THREE.DoubleSide,
+  });
+  // The river mesh stretches >35 km along X and ~7 km laterally. Three.js
+  // computes the bounding sphere lazily and uses it for frustum culling — for
+  // a strip this elongated the sphere is enormous and any subtle issue (or a
+  // sphere that has not been computed at all) can suppress the entire mesh.
+  // Disable frustum culling: it's a single thin ribbon, the cost is trivial
+  // and we always want it drawn.
+  g.computeBoundingSphere();
+  const mesh = new THREE.Mesh(g, m);
+  mesh.frustumCulled = false;
+  group.add(mesh);
+  return group;
+}
+scene.add(buildRiver());
 
 // ============================================================
 // TRACK — ballast + sleepers + rails, swept along centreline
@@ -1215,6 +1336,46 @@ function buildLandmarks(){
       const ceiling = new THREE.Mesh(new THREE.BoxGeometry(passW + 2*wallT, lintelH, ft.len), interiorMat);
       ceiling.position.set(passLat, passH + lintelH/2, 0);
       g.add(ceiling);
+      group.add(g);
+    } else if (ft.type === 'bridge'){
+      // Stone arch bridge over the river Aire. The river crosses under the
+      // line at ft.km (riverLatAt returns 0 there). Bridge spans laterally
+      // across both tracks plus a generous overhang so the deck is visible
+      // either side of the trackbed; arched piers extend down to water level.
+      const g = new THREE.Group();
+      g.position.copy(f.p).add(new THREE.Vector3(0, -0.8, 0));   // sit just below grade
+      g.rotation.y = yaw;
+      const stone   = new THREE.MeshStandardMaterial({ color: 0x9d8264, roughness: 0.95 });
+      const stoneD  = new THREE.MeshStandardMaterial({ color: 0x7a6552, roughness: 0.95 });
+      const deckW   = TRACK_GAUGE_OFFSET + 8;          // span both tracks plus overhang
+      const deckH   = 1.4;
+      const parapetH = 1.0;
+      const cx      = TRACK_GAUGE_OFFSET / 2;          // centred between the two tracks
+      // Deck — flat slab under the rails
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(deckW, deckH, ft.len), stone);
+      deck.position.set(cx, deckH/2, 0);
+      g.add(deck);
+      // Parapets — short stone walls along the outer edges
+      const paraL = new THREE.Mesh(new THREE.BoxGeometry(0.5, parapetH, ft.len), stoneD);
+      paraL.position.set(cx - deckW/2 + 0.25, deckH + parapetH/2, 0);
+      g.add(paraL);
+      const paraR = new THREE.Mesh(new THREE.BoxGeometry(0.5, parapetH, ft.len), stoneD);
+      paraR.position.set(cx + deckW/2 - 0.25, deckH + parapetH/2, 0);
+      g.add(paraR);
+      // Piers — two stone columns dropping to water level either side of the
+      // channel, with a wider abutment slab at each end.
+      const pierH = 1.6;
+      const pierW = 1.4;
+      const halfL = ft.len / 2;
+      function pier(z){
+        const m = new THREE.Mesh(new THREE.BoxGeometry(deckW, pierH, pierW), stone);
+        m.position.set(cx, -pierH/2, z);
+        g.add(m);
+      }
+      pier(-halfL + pierW/2);
+      pier(+halfL - pierW/2);
+      // Mid-stream pier for the longer bridges (helps the eye read the span)
+      if (ft.len > 25) pier(0);
       group.add(g);
     }
   }
@@ -2379,7 +2540,7 @@ function togglePause(){
 }
 
 // Expose module-scope state for browser-console debugging.
-window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts };
+window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts, riverLatAt, get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;}, get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
 
 // Boot
 buildMenuList();
