@@ -701,11 +701,12 @@ function buildRiver(){
   // MeshBasic (unlit) keeps the water a solid readable blue irrespective of
   // the ribbon's normal direction; computeVertexNormals can leave the face
   // pointing downward depending on the local trackFrame.r winding, which
-  // would make a Standard-lit material almost black. polygonOffset biases the
-  // mesh toward the camera so it reads cleanly above the grass terrain.
+  // would make a Standard-lit material almost black. The +0.05 m lift above
+  // local terrain is enough to avoid z-fighting with the grass without a
+  // polygonOffset bias — using one would let the water draw over bridge
+  // masonry that sits at similar depths.
   const m = new THREE.MeshBasicMaterial({
     color: 0x3a6f9a,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     side: THREE.DoubleSide,
   });
   // The river mesh stretches >35 km along X and ~7 km laterally. Three.js
@@ -1339,43 +1340,64 @@ function buildLandmarks(){
       group.add(g);
     } else if (ft.type === 'bridge'){
       // Stone arch bridge over the river Aire. The river crosses under the
-      // line at ft.km (riverLatAt returns 0 there). Bridge spans laterally
-      // across both tracks plus a generous overhang so the deck is visible
-      // either side of the trackbed; arched piers extend down to water level.
+      // line at ft.km (riverLatAt returns 0 there). Earlier the bridge sat
+      // 0.8 m below grade with a 1 m parapet, which read as a low kerb from
+      // the cab and was almost invisible against the surrounding grass.
+      // Rebuilt as a substantial masonry structure: light sandstone deck
+      // just below the rails, tall darker parapets either side that the
+      // train passes between, and abutment walls dropping past water level
+      // so the bridge reads from any angle.
       const g = new THREE.Group();
-      g.position.copy(f.p).add(new THREE.Vector3(0, -0.8, 0));   // sit just below grade
+      g.position.copy(f.p);                            // anchor at rail level
       g.rotation.y = yaw;
-      const stone   = new THREE.MeshStandardMaterial({ color: 0x9d8264, roughness: 0.95 });
-      const stoneD  = new THREE.MeshStandardMaterial({ color: 0x7a6552, roughness: 0.95 });
-      const deckW   = TRACK_GAUGE_OFFSET + 8;          // span both tracks plus overhang
-      const deckH   = 1.4;
-      const parapetH = 1.0;
+      const stone   = new THREE.MeshStandardMaterial({ color: 0xc8b08a, roughness: 0.95 });   // light sandstone
+      const stoneD  = new THREE.MeshStandardMaterial({ color: 0xa68a64, roughness: 0.95 });   // weathered
       const cx      = TRACK_GAUGE_OFFSET / 2;          // centred between the two tracks
-      // Deck — flat slab under the rails
+      const deckW   = TRACK_GAUGE_OFFSET + 9;          // ~13 m wide — generous overhang
+      const halfL   = ft.len / 2;
+      // ---- Deck slab (just below the rails so the train sits on top) ----
+      const deckTopY = -0.2;
+      const deckBotY = -0.7;
+      const deckH    = deckTopY - deckBotY;
       const deck = new THREE.Mesh(new THREE.BoxGeometry(deckW, deckH, ft.len), stone);
-      deck.position.set(cx, deckH/2, 0);
+      deck.position.set(cx, (deckTopY + deckBotY)/2, 0);
       g.add(deck);
-      // Parapets — short stone walls along the outer edges
-      const paraL = new THREE.Mesh(new THREE.BoxGeometry(0.5, parapetH, ft.len), stoneD);
-      paraL.position.set(cx - deckW/2 + 0.25, deckH + parapetH/2, 0);
+      // ---- Tall side parapets — main visual cue from the cab ----
+      const paraH = 1.8;
+      const paraT = 0.8;
+      const paraL = new THREE.Mesh(new THREE.BoxGeometry(paraT, paraH, ft.len), stoneD);
+      paraL.position.set(cx - deckW/2 + paraT/2, deckTopY + paraH/2, 0);
       g.add(paraL);
-      const paraR = new THREE.Mesh(new THREE.BoxGeometry(0.5, parapetH, ft.len), stoneD);
-      paraR.position.set(cx + deckW/2 - 0.25, deckH + parapetH/2, 0);
+      const paraR = new THREE.Mesh(new THREE.BoxGeometry(paraT, paraH, ft.len), stoneD);
+      paraR.position.set(cx + deckW/2 - paraT/2, deckTopY + paraH/2, 0);
       g.add(paraR);
-      // Piers — two stone columns dropping to water level either side of the
-      // channel, with a wider abutment slab at each end.
-      const pierH = 1.6;
-      const pierW = 1.4;
-      const halfL = ft.len / 2;
-      function pier(z){
-        const m = new THREE.Mesh(new THREE.BoxGeometry(deckW, pierH, pierW), stone);
-        m.position.set(cx, -pierH/2, z);
+      // Pillar caps at each parapet end (read like solid stone abutments)
+      const capH = 2.4;
+      const capT = 1.4;
+      function paraCap(zEnd, side){
+        const sx = side === 'L' ? -1 : 1;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(capT, capH, capT), stone);
+        m.position.set(cx + sx * (deckW/2 - capT/2), deckTopY + capH/2 - 0.2, zEnd);
         g.add(m);
       }
-      pier(-halfL + pierW/2);
-      pier(+halfL - pierW/2);
-      // Mid-stream pier for the longer bridges (helps the eye read the span)
-      if (ft.len > 25) pier(0);
+      paraCap(-halfL + capT/2, 'L'); paraCap(-halfL + capT/2, 'R');
+      paraCap(+halfL - capT/2, 'L'); paraCap(+halfL - capT/2, 'R');
+      // ---- Abutment walls below the deck dropping past water level ----
+      const abutBotY = -3.5;
+      const abutH    = deckBotY - abutBotY;
+      const abutT    = 0.9;
+      const abutL = new THREE.Mesh(new THREE.BoxGeometry(abutT, abutH, ft.len), stone);
+      abutL.position.set(cx - deckW/2 + abutT/2, (deckBotY + abutBotY)/2, 0);
+      g.add(abutL);
+      const abutR = new THREE.Mesh(new THREE.BoxGeometry(abutT, abutH, ft.len), stone);
+      abutR.position.set(cx + deckW/2 - abutT/2, (deckBotY + abutBotY)/2, 0);
+      g.add(abutR);
+      // ---- Mid-stream pier on longer bridges (reads as a real span) ----
+      if (ft.len > 25){
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(deckW + 2, abutH, 2.0), stone);
+        pier.position.set(cx, (deckBotY + abutBotY)/2, 0);
+        g.add(pier);
+      }
       group.add(g);
     }
   }
