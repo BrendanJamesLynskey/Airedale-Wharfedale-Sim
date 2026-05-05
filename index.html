@@ -602,7 +602,15 @@ function buildTrack(){
   const rg = new THREE.Group();
   function buildRail(centreOffset, signRail){
     const pts = [];
-    const stepRail = 0.10;       // 100m control-point spacing — Catmull-Rom smooths the curve
+    // 5m control-point spacing. Earlier values (50m, then 100m for crash
+    // mitigation) made the extruded rail visibly cut corners on curves: with
+    // steps:pts.length, ExtrudeGeometry places rings only at control points
+    // and draws straight tube segments between, so on bends the rail short-
+    // circuited the curve while the densely-spaced sleepers stayed on it. The
+    // rail-to-sleeper alignment then drifted as the camera moved through the
+    // bend. 5m sampling keeps the per-segment chord error well below 1 cm
+    // even on the tightest Aire-valley curves.
+    const stepRail = 0.005;
     const railSegs = floor(ROUTE.totalKm / stepRail);
     for (let i = 0; i <= railSegs; i++){
       const km = i * stepRail;
