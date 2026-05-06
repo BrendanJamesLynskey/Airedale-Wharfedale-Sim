@@ -1225,17 +1225,46 @@ function buildScatter(){
   group.add(trees);
 
   // BUILDINGS — boxes with brick texture, scattered further out, denser around stations
+  // Weighted by settlement size: Leeds dominates as a city, Skipton/Shipley/
+  // Bingley/Keighley are market towns, and Kirkstall Forge / Apperley Bridge /
+  // Saltaire / Crossflatts / Steeton / Cononley are villages or commuter halts
+  // that should look sparse rather than urban. The previous uniform pick gave
+  // every station the same ~145 buildings, which made small Aire-valley
+  // villages read as towns.
+  const STATION_WEIGHT = {
+    LDS: 30,            // Leeds — major city
+    SKI: 10,            // Skipton — market town
+    SHY:  8, KEI:  8,   // Shipley, Keighley — towns
+    BIY:  6,            // Bingley — town
+    SAE:  2, APY:  2, SON: 2,   // Saltaire / Apperley Bridge / Steeton — villages
+    KLF:  1, CFL:  1, CEY: 1,   // Kirkstall Forge / Crossflatts / Cononley — small halts
+  };
+  const _stnW = ROUTE.stations.map(s => STATION_WEIGHT[s.code] || 1);
+  const _stnWTot = _stnW.reduce((a,b) => a + b, 0);
+  function pickWeightedStation(){
+    let r = rng() * _stnWTot;
+    for (let i = 0; i < ROUTE.stations.length; i++){
+      r -= _stnW[i];
+      if (r <= 0) return ROUTE.stations[i];
+    }
+    return ROUTE.stations[ROUTE.stations.length - 1];
+  }
   const bldGeo = new THREE.BoxGeometry(1,1,1);
   const bldMat = new THREE.MeshStandardMaterial({ map: texBrick, roughness: 0.95 });
   const bldCount = QUALITY === 'desktop' ? 1600 : 600;
   const buildings = new THREE.InstancedMesh(bldGeo, bldMat, bldCount);
   for (let i = 0; i < bldCount; i++){
-    // Bias toward stations
-    const s = ROUTE.stations[floor(rng()*ROUTE.stations.length)];
-    const km = clamp(s.km + (rng()-0.5)*1.6, 0.2, ROUTE.totalKm-0.2);
+    const s = pickWeightedStation();
+    const sw = STATION_WEIGHT[s.code] || 1;
+    // Tighter spread + closer max distance for villages so the cluster reads
+    // as a hamlet rather than a sprawl. Cities can spread up to ~1.3 km along
+    // the line and ~230 m laterally; villages stay within ~0.5 km × ~110 m.
+    const spreadKm = 0.4 + sw * 0.03;
+    const km = clamp(s.km + (rng()-0.5) * spreadKm * 2, 0.2, ROUTE.totalKm - 0.2);
     const f = trackFrame(km);
     const side = rng() < 0.5 ? -1 : 1;
-    const dist = 35 + rng()*200;
+    const distMax = 60 + sw * 5;
+    const dist = 35 + rng() * distMax;
     const p = f.p.clone().add(f.r.clone().multiplyScalar(side * dist));
     const w = 4 + rng()*10, h = 4 + rng()*8, d = 4 + rng()*10;
     p.y += h/2 - 0.5;
