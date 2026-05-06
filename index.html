@@ -2527,8 +2527,12 @@ const clock = new THREE.Clock();
 const camRig = new THREE.Object3D();
 scene.add(camRig);
 camRig.add(camera);
-// camera sits at driver's eye position relative to rig
-camera.position.set(0, 1.85, 0.30);
+// Camera sits at the driver's eye position relative to rig. UK trains run on
+// the left so the driver's seat is on the left side of the cab — moving the
+// eye to x = -0.7 (cab is roughly ±1.3 wide internally) puts the centre pillar
+// to the right of the field of view and makes the left windscreen pane the
+// primary forward window, matching real Class 333 driving position.
+camera.position.set(-0.7, 1.85, 0.30);
 
 // Mouse / touch look (small free-look)
 let lookYaw = 0, lookPitch = 0;
