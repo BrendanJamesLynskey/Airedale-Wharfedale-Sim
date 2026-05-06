@@ -66,7 +66,7 @@ The menu's **DEMO RUN ×2** button starts an autopilot that drives the route end
 - All audio is **synthesised in the browser via WebAudio** (traction whine, brake hiss, AWS bell/buzzer, two-tone horn). Hooks in the audio code allow real Freesound CC-licensed recordings to be slotted in later.
 - Designed to run on desktop and mobile (touch overlay, responsive HUD).
 - Route geometry follows the real Airedale Line — station GPS positions plus ~10 intermediate shape points are projected (equirectangular, rotated to the mean Leeds→Skipton bearing) and interpolated with Catmull-Rom curves. Shape-point coordinates are educated approximations of the Aire valley meander; refine with OSM way data for higher fidelity. Gradient profile and lineside features remain stylised.
-- The river Aire is rendered as a meandering blue ribbon parametrised by lateral offset from the track, with its offset crossing zero at three stone-arch bridges (Apperley Bridge, Shipley, Steeton). The water surface samples the same undulation function as the terrain so it sits at local grade rather than a fixed Y. Bridge locations are approximations.
+- The river Aire is rendered as a meandering blue ribbon parametrised by lateral offset from the track. The line crosses the Aire only once on the real Airedale route — at Apperley Bridge — and the river stays on the south side from there through Saltaire, Bingley, Crossflatts, Keighley, Steeton, Cononley to Skipton (Salts Mill sits between line and river at Saltaire). The water surface samples the same undulation function as the terrain so it sits at local grade rather than a fixed Y.
 
 ## Roadmap
 

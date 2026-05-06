@@ -81,8 +81,12 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
       <b>SPACE</b> Emergency brake &nbsp; <b>H</b> Horn (high) &nbsp; <b>J</b> Horn (low) &nbsp; <b>Q</b> AWS reset &nbsp; <b>E</b> DSD reset<br>
       <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
     </div>
+    <label style="display:flex;align-items:center;justify-content:center;gap:0.6em;margin-bottom:0.7rem;font-size:0.78rem;letter-spacing:0.18em;color:rgba(180,210,235,0.75);cursor:pointer;text-transform:uppercase;">
+      <input id="fastChk" type="checkbox" style="width:1.1em;height:1.1em;accent-color:#5cc8ff;cursor:pointer;">
+      2× speed
+    </label>
     <button id="startBtn">START SERVICE</button>
-    <button id="demoBtn" style="margin-top:0.6rem;background:linear-gradient(180deg,rgba(255,180,80,0.18),rgba(255,180,80,0.06));border-color:rgba(255,180,80,0.5);color:#ffe2b8;">DEMO RUN ×2</button>
+    <button id="demoBtn" style="margin-top:0.6rem;background:linear-gradient(180deg,rgba(255,180,80,0.18),rgba(255,180,80,0.06));border-color:rgba(255,180,80,0.5);color:#ffe2b8;">DEMO RUN</button>
     <div class="credits">
       Open-source railway data via OpenStreetMap (ODbL). Procedural audio synthesised in-browser.<br>
       Built by <a href="https://github.com/BrendanJamesLynskey">Brendan Lynskey</a> &middot; <a href="https://github.com/BrendanJamesLynskey/Airedale-Wharfedale-Sim">source</a>
@@ -167,16 +171,17 @@ const ROUTE = {
     { km: 26.00, mph: 75 },
     { km: 41.20, mph: 25 },   // Skipton approach
   ],
-  // Notable lineside features
+  // Notable lineside features. Earlier passes had a Bramley Tunnel at km 4.2,
+  // a Keighley-approach tunnel at km 24.1, and an unnamed viaduct at km 27.8 —
+  // all fabricated. The real Airedale Line is largely at-grade through the
+  // Aire valley with one major river crossing (Apperley Bridge) and the
+  // listed industrial heritage at Saltaire. Bingley has a short elevated
+  // approach which we keep as a stylised viaduct so the track doesn't read
+  // as a single uninterrupted embankment.
   features: [
-    { km:  4.20, type: 'tunnel', len: 30 },        // Bramley
-    { km: 10.30, type: 'bridge', len: 32 },        // Apperley Bridge — line crosses Aire
-    { km: 14.30, type: 'bridge', len: 26 },        // Shipley Aire crossing
-    { km: 15.55, type: 'mill',   side: 'L' },      // Salts Mill (UNESCO)
-    { km: 19.30, type: 'viaduct', len: 80 },       // Bingley
-    { km: 24.10, type: 'tunnel', len: 100 },       // approach Keighley
-    { km: 27.80, type: 'viaduct', len: 50 },
-    { km: 28.40, type: 'bridge', len: 28 },        // Steeton/Silsden Aire crossing
+    { km: 10.30, type: 'bridge',  len: 32 },       // Apperley Bridge — line crosses Aire
+    { km: 15.55, type: 'mill',    side: 'L' },     // Salts Mill (UNESCO World Heritage)
+    { km: 19.30, type: 'viaduct', len: 80 },       // Bingley — elevated approach (stylised)
   ],
   // River Aire path expressed as lateral offset (metres) from the track centre-
   // line at given km values. Negative = north of line, positive = south. The
@@ -186,30 +191,30 @@ const ROUTE = {
   // so the river bends organically rather than running dead straight.
   // NOTE: this is a stylised approximation of the Aire valley — the bridge
   // locations and offsets are educated guesses, not OSM-derived.
+  // The line crosses the Aire once, at Apperley Bridge — the river is on the
+  // north side of the trackbed from Leeds out to that point, and stays on
+  // the south side from there all the way to Skipton. Salts Mill is between
+  // the line and the river at Saltaire (south of the line); the Leeds-
+  // Liverpool Canal sits to the north. Earlier passes had spurious extra
+  // crossings at Shipley and Steeton that put the river on the wrong side
+  // through Saltaire and Bingley.
   // Each bridge gets a ±0.02 km / lat ±45 waypoint pair flanking the
-  // crossing so the smoothstep between bridge (lat=0) and the next long-
-  // distance waypoint diverges sharply rather than holding the river under
-  // the trackbed for hundreds of metres past the bridge end.
+  // crossing so the smoothstep diverges sharply rather than holding the
+  // river under the trackbed for hundreds of metres past the bridge end.
   riverPath: [
     { km:  0.00, lat: -130 },
     { km:  4.00, lat:  -90 },
     { km:  8.00, lat: -110 },
     { km: 10.28, lat:  -45 },   // approach Apperley Bridge from north
-    { km: 10.30, lat:    0 },   // Apperley Bridge crossing
+    { km: 10.30, lat:    0 },   // Apperley Bridge — only crossing
     { km: 10.32, lat:   45 },   // diverge south just past bridge end
-    { km: 12.20, lat:   95 },
-    { km: 14.28, lat:   45 },   // approach Shipley from south
-    { km: 14.30, lat:    0 },   // Shipley crossing
-    { km: 14.32, lat:  -45 },   // diverge north
-    { km: 18.00, lat: -110 },
-    { km: 22.00, lat:  -90 },
-    { km: 26.00, lat: -100 },
-    { km: 28.38, lat:  -45 },   // approach Steeton from north
-    { km: 28.40, lat:    0 },   // Steeton/Silsden crossing
-    { km: 28.42, lat:   45 },   // diverge south
-    { km: 32.00, lat:  120 },
-    { km: 38.00, lat:  140 },
-    { km: 41.80, lat:  160 },
+    { km: 12.20, lat:   95 },   // through Shipley/Saltaire — river south
+    { km: 18.00, lat:  110 },   // through Bingley
+    { km: 22.00, lat:   95 },   // through Crossflatts/Keighley
+    { km: 26.00, lat:  100 },
+    { km: 30.00, lat:  110 },   // through Steeton
+    { km: 34.00, lat:  130 },   // through Cononley
+    { km: 41.80, lat:  160 },   // Skipton approach
   ],
 };
 
@@ -2071,9 +2076,9 @@ const GS = {
   wiperPhase: 0,
   signalAhead: null,         // SIGNALS entry just ahead
   nextSignalIdx: 0,
-  demo: false,               // autopilot drives the train at 2× sim speed
+  demo: false,               // autopilot drives the train when true
+  timeScale: 1.0,            // sim-time multiplier (1× normal, 2× when '2× speed' checkbox is on)
 };
-const DEMO_SPEED = 2.0;        // sim time multiplier in demo mode
 const DEMO_DECEL = 0.55;       // m/s², autopilot brake target — well under maxBrake
 
 // Pre-sort signals by km
@@ -2325,10 +2330,11 @@ function updateStations(dt){
     }
   } else if (GS.stopState === 'stopped'){
     GS.doorT += dt;
-    // Demo mode shortens the door cycle so the run completes in a few
-    // minutes rather than ~14 minutes of mostly waiting at platforms.
-    const openDwell = GS.demo ? 3.0 : 35.0;
-    const closeDur  = GS.demo ? 1.5 : 4.0;
+    // 2× mode and demo both shorten the door cycle so the run completes in
+    // a few minutes rather than ~14 minutes of mostly waiting at platforms.
+    const fast = GS.demo || GS.timeScale > 1.5;
+    const openDwell = fast ? 3.0 : 35.0;
+    const closeDur  = fast ? 1.5 : 4.0;
     if (GS.doors === 'opening' && GS.doorT > 1.6){ GS.doors = 'open'; GS.doorT = 0; }
     if (GS.doors === 'open' && GS.doorT > openDwell){ GS.doors = 'closing'; GS.doorT = 0;
       cab.ledDoor.material.color.setHex(0xff5555);
@@ -2402,7 +2408,8 @@ function updateHUD(dt){
   const distKm = ns ? (ns.km - GS.km).toFixed(2) : '—';
   elTopNext.textContent = ns ? `NEXT: ${ns.name.toUpperCase()}  ${distKm} km   |  ${speedMph} MPH / ${lim}  ${overSpeed?'⚠':''}` : `END OF SERVICE — ${speedMph} MPH`;
   elTopClk.textContent  = `${notchLabel(GS.notch)}  ${fmtTime(GS.serviceTime)}`;
-  elTopScr.textContent  = GS.demo ? `DEMO ×2  ·  SCORE: ${GS.score}` : `SCORE: ${GS.score}`;
+  const sc = Math.round(GS.score);
+  elTopScr.textContent  = GS.demo ? `DEMO ×${(GS.timeScale||1).toFixed(0)}  ·  SCORE: ${sc}` : `SCORE: ${sc}`;
 }
 
 // ============================================================
@@ -2494,11 +2501,17 @@ canvas.addEventListener('pointermove', e=>{
 
 // Speed-driven motion cues. Judder amplitude grows quadratically with speed so
 // it stays imperceptible at low speed and noticeable (but not derailment-like)
-// at line speed. FOV widens slightly with speed for a "rushing in" feeling.
+// at line speed. FOV widens with speed for a "rushing in" feeling, and the
+// fog draw distance shrinks slightly at speed for a haze-closing-in effect.
+// Earlier these values were 4× smaller — the user reported they couldn't
+// perceive any speed difference, so they were bumped to clearly readable
+// magnitudes while still avoiding derailment-grade shake.
 const SPEED_REF = 33.5;          // m/s ≈ 75 mph (line speed) — normalises speed to 0..1
-const JUDDER_MAX = 0.015;        // peak amplitude (m) at line speed
+const JUDDER_MAX = 0.06;         // peak amplitude (m) at line speed — ~6 cm cab buzz
 const FOV_BASE = 62;
-const FOV_GAIN = 6;              // degrees added at line speed
+const FOV_GAIN = 14;             // degrees added at line speed (62 → 76°)
+const FOG_NEAR_BASE = 600, FOG_NEAR_MIN = 280;
+const FOG_FAR_BASE  = 3200, FOG_FAR_MIN = 2000;
 function placeCamera(){
   const f = trackFrame(GS.km);
   const speedFactor = clamp(GS.v / SPEED_REF, 0, 1);
@@ -2532,6 +2545,9 @@ function placeCamera(){
     camera.fov = targetFov;
     camera.updateProjectionMatrix();
   }
+  // Fog tightens with speed — distant detail hazes a little, suggesting motion blur.
+  scene.fog.near = lerp(FOG_NEAR_BASE, FOG_NEAR_MIN, speedFactor);
+  scene.fog.far  = lerp(FOG_FAR_BASE,  FOG_FAR_MIN,  speedFactor);
 }
 
 function endOfRoute(){
@@ -2552,10 +2568,11 @@ function endOfRoute(){
 function loop(){
   const dt = min(clock.getDelta(), 0.05);
   if (GS.running && !GS.paused){
-    // Demo mode: scale sim time so the run plays back at 2× while frame
-    // rendering stays smooth at real-time. Physics, station logic, signals
-    // and door cycles all see the scaled dt.
-    const simDt = GS.demo ? dt * DEMO_SPEED : dt;
+    // Sim-time scale: applied to physics, station logic, signals, doors.
+    // Frame rendering stays at real-time (the renderer.render call is
+    // outside this gate). Demo and player modes both honour GS.timeScale,
+    // which is set from the menu's '2× speed' checkbox.
+    const simDt = dt * GS.timeScale;
     GS.serviceTime += simDt;
 
     if (GS.demo) demoAutopilot();
@@ -2638,6 +2655,7 @@ function beginService(demo){
   document.getElementById('hud').style.display = 'block';
   GS.running = true;
   GS.demo = !!demo;
+  GS.timeScale = document.getElementById('fastChk').checked ? 2.0 : 1.0;
   GS.km = 0; GS.v = 0; GS.notch = 0; GS.score = 0;
   GS.serviceTime = 0; GS.nextStationIdx = 1;
   GS.dsdTimer = 0; GS.dsdWarn = false;
@@ -2648,7 +2666,8 @@ function beginService(demo){
   // and incremented nextStationIdx to 2, silently skipping Kirkstall Forge.
   GS.stopState = 'enroute';
   GS._endShown = false;
-  showMsg(demo ? 'DEMO RUN — AUTOPILOT ENGAGED, 2× SPEED' : 'RIGHT AWAY — SIGNAL OFF — PROCEED', '', 3.0);
+  const tag = GS.timeScale > 1.5 ? ' (2×)' : '';
+  showMsg(demo ? `DEMO RUN — AUTOPILOT ENGAGED${tag}` : `RIGHT AWAY — SIGNAL OFF — PROCEED${tag}`, '', 3.0);
 }
 document.getElementById('startBtn').addEventListener('click', () => beginService(false));
 document.getElementById('demoBtn').addEventListener('click', () => beginService(true));
