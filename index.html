@@ -82,6 +82,7 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
       <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
     </div>
     <button id="startBtn">START SERVICE</button>
+    <button id="demoBtn" style="margin-top:0.6rem;background:linear-gradient(180deg,rgba(255,180,80,0.18),rgba(255,180,80,0.06));border-color:rgba(255,180,80,0.5);color:#ffe2b8;">DEMO RUN ×2</button>
     <div class="credits">
       Open-source railway data via OpenStreetMap (ODbL). Procedural audio synthesised in-browser.<br>
       Built by <a href="https://github.com/BrendanJamesLynskey">Brendan Lynskey</a> &middot; <a href="https://github.com/BrendanJamesLynskey/Airedale-Wharfedale-Sim">source</a>
@@ -2070,7 +2071,10 @@ const GS = {
   wiperPhase: 0,
   signalAhead: null,         // SIGNALS entry just ahead
   nextSignalIdx: 0,
+  demo: false,               // autopilot drives the train at 2× sim speed
 };
+const DEMO_SPEED = 2.0;        // sim time multiplier in demo mode
+const DEMO_DECEL = 0.55;       // m/s², autopilot brake target — well under maxBrake
 
 // Pre-sort signals by km
 SIGNALS.sort((a,b)=>a.km-b.km);
@@ -2204,6 +2208,50 @@ function updateSignals(km){
 }
 
 // ============================================================
+// DEMO AUTOPILOT — drives the train cleanly through the route
+// Target speed at any km is min(legal limit, brake-to-platform target).
+// Notch is then chosen by error: too fast → brake (severity scales), too
+// slow → power. While stopped at a platform the autopilot sits at notch=0
+// and lets the existing door state machine cycle.
+// ============================================================
+function demoTargetSpeed(){
+  const limMs = speedLimitAt(GS.km) * MPH_TO_MS;
+  const ns = ROUTE.stations[GS.nextStationIdx];
+  if (!ns) return limMs;
+  // Distance remaining to platform centre. Aim a hair short so we don't
+  // overshoot when the brake response lags the model by a single tick.
+  const distM = max(0, (ns.km - GS.km) * KM - 1.0);
+  // v² ≤ 2·a·d → maximum entry speed that still permits a clean stop.
+  const vBrake = sqrt(2 * DEMO_DECEL * distM);
+  return min(limMs, vBrake);
+}
+function demoAutopilot(){
+  // Sit at zero notch while doors are cycling.
+  if (GS.stopState === 'stopped'){ GS.notch = 0; return; }
+  // Right after doors close the train is still at the platform, so
+  // nextStationIdx hasn't advanced yet — demoTargetSpeed would compute
+  // distM=0 and target=0, holding notch at 0 forever (deadlock). Force
+  // full power until v exceeds the 1 m/s gate that updateStations
+  // watches for to advance the station pointer.
+  if (GS.stopState === 'departed'){ GS.notch = T333.powerNotches - 1; return; }
+  const target = demoTargetSpeed();
+  const err = GS.v - target;     // positive = above target
+  if      (err >  2.0) GS.notch = -4;     // hard brake
+  else if (err >  0.6) GS.notch = -2;
+  else if (err >  0.0) GS.notch = -1;     // trim down
+  else if (err > -0.6) GS.notch =  0;     // coast at limit
+  else if (err > -2.0) GS.notch =  2;
+  else                 GS.notch =  4;     // P4 max power
+  // Final crawl: at low speed close to platform, keep light brake to ensure
+  // a positive zero-velocity arrival rather than oscillating around target.
+  const ns = ROUTE.stations[GS.nextStationIdx];
+  if (ns){
+    const distM = (ns.km - GS.km) * KM;
+    if (distM < 6 && GS.v < 1.5) GS.notch = -2;
+  }
+}
+
+// ============================================================
 // PHYSICS
 // ============================================================
 function physicsStep(dt){
@@ -2277,12 +2325,16 @@ function updateStations(dt){
     }
   } else if (GS.stopState === 'stopped'){
     GS.doorT += dt;
+    // Demo mode shortens the door cycle so the run completes in a few
+    // minutes rather than ~14 minutes of mostly waiting at platforms.
+    const openDwell = GS.demo ? 3.0 : 35.0;
+    const closeDur  = GS.demo ? 1.5 : 4.0;
     if (GS.doors === 'opening' && GS.doorT > 1.6){ GS.doors = 'open'; GS.doorT = 0; }
-    if (GS.doors === 'open' && GS.doorT > 35){ GS.doors = 'closing'; GS.doorT = 0;
+    if (GS.doors === 'open' && GS.doorT > openDwell){ GS.doors = 'closing'; GS.doorT = 0;
       cab.ledDoor.material.color.setHex(0xff5555);
       showMsg('DOORS CLOSING — RIGHT AWAY', '', 2.0);
     }
-    if (GS.doors === 'closing' && GS.doorT > 4){ GS.doors = 'closed'; GS.doorT = 0;
+    if (GS.doors === 'closing' && GS.doorT > closeDur){ GS.doors = 'closed'; GS.doorT = 0;
       cab.ledDoor.material.color.setHex(0x222222);
       GS.stopState = 'departed';
       showMsg('DOOR INTERLOCK CLEAR — PROCEED', '', 2.0);
@@ -2350,7 +2402,7 @@ function updateHUD(dt){
   const distKm = ns ? (ns.km - GS.km).toFixed(2) : '—';
   elTopNext.textContent = ns ? `NEXT: ${ns.name.toUpperCase()}  ${distKm} km   |  ${speedMph} MPH / ${lim}  ${overSpeed?'⚠':''}` : `END OF SERVICE — ${speedMph} MPH`;
   elTopClk.textContent  = `${notchLabel(GS.notch)}  ${fmtTime(GS.serviceTime)}`;
-  elTopScr.textContent  = `SCORE: ${GS.score}`;
+  elTopScr.textContent  = GS.demo ? `DEMO ×2  ·  SCORE: ${GS.score}` : `SCORE: ${GS.score}`;
 }
 
 // ============================================================
@@ -2500,45 +2552,53 @@ function endOfRoute(){
 function loop(){
   const dt = min(clock.getDelta(), 0.05);
   if (GS.running && !GS.paused){
-    GS.serviceTime += dt;
+    // Demo mode: scale sim time so the run plays back at 2× while frame
+    // rendering stays smooth at real-time. Physics, station logic, signals
+    // and door cycles all see the scaled dt.
+    const simDt = GS.demo ? dt * DEMO_SPEED : dt;
+    GS.serviceTime += simDt;
 
-    processHeldKeys(dt);
-    physicsStep(dt);
-    updateStations(dt);
+    if (GS.demo) demoAutopilot();
+    else processHeldKeys(dt);
+    physicsStep(simDt);
+    updateStations(simDt);
     updateSignals(GS.km);
     updateAWSTriggers();
 
-    // AWS escalation: not reset within window → emergency brake
-    if (GS.awsArmed){
-      GS.awsTimer += dt;
-      if (GS.awsTimer > 2.7){
-        GS.notch = -6;
-        GS.awsFails++;
-        showMsg('AWS NOT ACKNOWLEDGED — EMERGENCY BRAKE', 'bad', 4.0);
-        GS.score -= 80;
-        // Reset AWS armed once brake applied (still buzzer until manual reset of cause)
-        GS.awsArmed = false;
-        GS.awsBuzzer = false;
-        cab.awsMat.map = cab.awsTexN; cab.awsMat.needsUpdate = true;
+    // AWS / DSD only escalate in player mode — in demo there's no driver
+    // to acknowledge, and we don't want the autopilot stuck in EB.
+    if (!GS.demo){
+      // AWS escalation: not reset within window → emergency brake
+      if (GS.awsArmed){
+        GS.awsTimer += simDt;
+        if (GS.awsTimer > 2.7){
+          GS.notch = -6;
+          GS.awsFails++;
+          showMsg('AWS NOT ACKNOWLEDGED — EMERGENCY BRAKE', 'bad', 4.0);
+          GS.score -= 80;
+          GS.awsArmed = false;
+          GS.awsBuzzer = false;
+          cab.awsMat.map = cab.awsTexN; cab.awsMat.needsUpdate = true;
+        }
       }
-    }
-    // DSD timer
-    GS.dsdTimer += dt;
-    if (GS.dsdTimer > 60 && !GS.dsdWarn){
-      GS.dsdWarn = true;
-      cab.ledDsd.material.color.setHex(0xffaa00);
-      showMsg('DSD WARNING — PRESS E', 'warn', 2.5);
-    }
-    if (GS.dsdTimer > 65){
-      GS.notch = -6;
-      cab.ledDsd.material.color.setHex(0xff4444);
-      showMsg('DSD ACTIVATED — EMERGENCY BRAKE', 'bad', 4.0);
-      GS.score -= 100;
-      GS.dsdTimer = 0; GS.dsdWarn = false;
+      // DSD timer
+      GS.dsdTimer += simDt;
+      if (GS.dsdTimer > 60 && !GS.dsdWarn){
+        GS.dsdWarn = true;
+        cab.ledDsd.material.color.setHex(0xffaa00);
+        showMsg('DSD WARNING — PRESS E', 'warn', 2.5);
+      }
+      if (GS.dsdTimer > 65){
+        GS.notch = -6;
+        cab.ledDsd.material.color.setHex(0xff4444);
+        showMsg('DSD ACTIVATED — EMERGENCY BRAKE', 'bad', 4.0);
+        GS.score -= 100;
+        GS.dsdTimer = 0; GS.dsdWarn = false;
+      }
     }
 
     placeCamera();
-    updateCabAnim(dt);
+    updateCabAnim(simDt);
     updateHUD(dt);
     audioTick({
       v: GS.v, notch: GS.notch,
@@ -2572,23 +2632,29 @@ function buildMenuList(){
   }).join('');
 }
 
-document.getElementById('startBtn').addEventListener('click', ()=>{
+function beginService(demo){
   initAudio();
   document.getElementById('menu').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   GS.running = true;
+  GS.demo = !!demo;
   GS.km = 0; GS.v = 0; GS.notch = 0; GS.score = 0;
   GS.serviceTime = 0; GS.nextStationIdx = 1;
+  GS.dsdTimer = 0; GS.dsdWarn = false;
+  GS.awsArmed = false; GS.awsTimer = 0; GS.awsBuzzer = false;
   // Already departing Leeds → en route to the first scheduled stop
   // (Kirkstall Forge). Using 'departed' here was a bug: the first time the
   // train exceeded 1 m/s, the state machine treated it as leaving station[1]
   // and incremented nextStationIdx to 2, silently skipping Kirkstall Forge.
   GS.stopState = 'enroute';
-  showMsg('RIGHT AWAY — SIGNAL OFF — PROCEED', '', 3.0);
-});
+  GS._endShown = false;
+  showMsg(demo ? 'DEMO RUN — AUTOPILOT ENGAGED, 2× SPEED' : 'RIGHT AWAY — SIGNAL OFF — PROCEED', '', 3.0);
+}
+document.getElementById('startBtn').addEventListener('click', () => beginService(false));
+document.getElementById('demoBtn').addEventListener('click', () => beginService(true));
 document.getElementById('resumeBtn').addEventListener('click', togglePause);
 document.getElementById('quitBtn').addEventListener('click', ()=>{
-  GS.running = false; GS.paused = false;
+  GS.running = false; GS.paused = false; GS.demo = false;
   document.getElementById('pause').style.display = 'none';
   document.getElementById('hud').style.display = 'none';
   document.getElementById('menu').style.display = 'flex';
@@ -2601,7 +2667,7 @@ function togglePause(){
 }
 
 // Expose module-scope state for browser-console debugging.
-window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts, riverLatAt, get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;}, get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
+window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts, riverLatAt, demoAutopilot, demoTargetSpeed, physicsStep, updateStations, get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;}, get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
 
 // Boot
 buildMenuList();

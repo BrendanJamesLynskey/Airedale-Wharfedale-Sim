@@ -47,6 +47,10 @@ the platform). Halt with the cab beside the marker for a perfect stop.
 
 On mobile, on-screen pads provide power, brake, horn, AWS reset and pause.
 
+## Demo Mode
+
+The menu's **DEMO RUN ×2** button starts an autopilot that drives the route end-to-end at 2× sim speed: target speed at any km is the lower of the legal limit and `sqrt(2·a·d)` braking distance to the next platform centre, notch is chosen by velocity error, station dwell is shortened, and DSD/AWS escalation is bypassed. Useful for showing the route without driving it.
+
 ## Driving Notes
 
 - Combined master controller has **5 power notches (P1–P4) and 6 brake notches (B1–B6)**, with **OFF** in the middle. B6 is emergency.
