@@ -78,8 +78,8 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
     <h2>Cab Controls</h2>
     <div class="keys">
       <b>↑</b>/<b>W</b> Lever up — power up / brake release &nbsp; <b>↓</b>/<b>S</b> Lever down — power down / brake apply<br>
-      <b>SPACE</b> Emergency brake &nbsp; <b>H</b> Horn (high) &nbsp; <b>J</b> Horn (low) &nbsp; <b>Q</b> AWS reset &nbsp; <b>E</b> DSD reset<br>
-      <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
+      <b>SPACE</b> Emergency brake &nbsp; <b>H</b> Horn (high) &nbsp; <b>J</b> Horn (low) &nbsp; <b>Q</b> AWS / TPWS reset &nbsp; <b>E</b> DSD reset<br>
+      <b>R</b> DRA set / cancel &nbsp; <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
     </div>
     <label style="display:flex;align-items:center;justify-content:center;gap:0.6em;margin-bottom:0.7rem;font-size:0.78rem;letter-spacing:0.18em;color:rgba(180,210,235,0.75);cursor:pointer;text-transform:uppercase;">
       <input id="fastChk" type="checkbox" style="width:1.1em;height:1.1em;accent-color:#5cc8ff;cursor:pointer;">
@@ -1575,7 +1575,8 @@ function makeGaugeFace(opts){
 }
 
 // Helper — make a gauge group: outer bezel mesh, face, needle. Returns { group, needle, faceTex }.
-function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowFrom, radius, sweepFrom, sweepTo, subLabel }){
+// `secondNeedleColor` (optional) adds a second concentric needle (e.g. duplex BC/BP gauge as on real Class 333).
+function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowFrom, radius, sweepFrom, sweepTo, subLabel, secondNeedleColor }){
   const grp = new THREE.Group();
   const tex = makeGaugeFace({ label, units, max, majorEvery, minorEvery, redFrom, yellowFrom, sweepFrom, sweepTo, subLabel });
   // Bezel ring (chrome)
@@ -1607,6 +1608,20 @@ function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowF
   needle.rotation.x = -PI/2;
   needle.position.y = 0.012;
   grp.add(needle);
+  // Optional second needle (duplex gauge — slimmer, drawn underneath the primary)
+  let needle2 = null;
+  if (secondNeedleColor !== undefined){
+    const n2Shape = new THREE.Shape();
+    n2Shape.moveTo(-radius*0.075, -radius*0.06);
+    n2Shape.lineTo( radius*0.075, -radius*0.06);
+    n2Shape.lineTo(0, radius * 0.78);
+    n2Shape.lineTo(-radius*0.075, -radius*0.06);
+    const n2Geo = new THREE.ShapeGeometry(n2Shape);
+    needle2 = new THREE.Mesh(n2Geo, new THREE.MeshBasicMaterial({ color: secondNeedleColor, side: THREE.DoubleSide }));
+    needle2.rotation.x = -PI/2;
+    needle2.position.y = 0.010;     // sits just under primary needle
+    grp.add(needle2);
+  }
   // Centre hub
   const hub = new THREE.Mesh(
     new THREE.CylinderGeometry(radius*0.07, radius*0.07, 0.012, 16),
@@ -1623,20 +1638,44 @@ function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowF
   glass.rotation.x = -PI/2;
   glass.position.y = 0.025;
   grp.add(glass);
-  return { group: grp, needle };
+  return { group: grp, needle, needle2 };
 }
 
 const cab = (function buildCab(){
   const g = new THREE.Group();
 
   // ==== Cab dashboard built with -Z = forward (driver looks out windscreen) ====
-  // Materials
-  const dashMat   = new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.55, metalness: 0.10 });
-  const panelMat  = new THREE.MeshStandardMaterial({ color: 0x2a2c2f, roughness: 0.70, metalness: 0.05 });
+  // Materials — colours tuned to the real Class 333 cab: warm-grey desk top with
+  // a slightly textured matte finish, near-black knee roll, dark-grey side trim.
+  const dashMat   = new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.78, metalness: 0.05 });
+  const panelMat  = new THREE.MeshStandardMaterial({ color: 0x32363b, roughness: 0.78, metalness: 0.03 });
   const trimMat   = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.40, metalness: 0.30 });
-  const frameMat  = new THREE.MeshStandardMaterial({ color: 0x202225, roughness: 0.45, metalness: 0.30 });
+  const frameMat  = new THREE.MeshStandardMaterial({ color: 0x23272b, roughness: 0.45, metalness: 0.30 });
   const seatMat   = new THREE.MeshStandardMaterial({ color: 0x21303f, roughness: 0.85, metalness: 0.05 });
   const floorMat  = new THREE.MeshStandardMaterial({ color: 0x16181a, roughness: 0.95 });
+  // Procedural panel-line texture for the dashboard top — subtle inset rectangles
+  // give the desk a moulded plastic look rather than a single flat slab.
+  const dashTopTex = (() => {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 320;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,0,320);
+    grad.addColorStop(0,'#34383d'); grad.addColorStop(1,'#23262a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,1024,320);
+    // Speckle for moulded plastic
+    for (let i = 0; i < 1800; i++){
+      ctx.fillStyle = 'rgba(255,255,255,' + (Math.random()*0.05) + ')';
+      ctx.fillRect(Math.random()*1024, Math.random()*320, 1, 1);
+    }
+    // Inset panel outlines
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2;
+    [[40,40,300,240],[360,40,300,240],[680,40,300,240]].forEach(([x,y,w,h])=>{
+      ctx.strokeRect(x,y,w,h);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.strokeRect(x+1,y+1,w-2,h-2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    });
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const dashTopMat = new THREE.MeshStandardMaterial({ map: dashTopTex, roughness: 0.78, metalness: 0.05 });
 
   // Main dashboard slab (sloped slightly toward driver — forms the gauge cluster surface)
   const dash = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.42, 1.05), dashMat);
@@ -1713,31 +1752,74 @@ const cab = (function buildCab(){
   const clusterZ = -1.05;
   const tiltX = -PI/2 + 0.12;       // face up the tilted dash
 
-  // Speedometer (left)
+  // Speedometer (left) — slightly larger, dominant instrument as on the real cab
   const speedo = makeGauge({
     label: 'MPH', units: 'CLASS 333', max: 100, majorEvery: 10, minorEvery: 5,
-    yellowFrom: 75, redFrom: 100, radius: 0.18, subLabel: 'SPEED'
+    yellowFrom: 75, redFrom: 100, radius: 0.20, subLabel: 'SPEED'
   });
-  speedo.group.position.set(-0.55, clusterY, clusterZ);
+  speedo.group.position.set(-0.62, clusterY, clusterZ);
   speedo.group.rotation.x = 0.12;
   g.add(speedo.group);
 
-  // Brake-cylinder pressure (centre-left)
+  // Digital LCD speed readout — sits below the speedo, mirroring the secondary
+  // numeric display fitted to refurbished Class 333 cabs.
+  const speedDigitsCanvas = document.createElement('canvas');
+  speedDigitsCanvas.width = 256; speedDigitsCanvas.height = 96;
+  const speedDigitsCtx = speedDigitsCanvas.getContext('2d');
+  function drawSpeedDigits(mph){
+    const c = speedDigitsCtx;
+    c.fillStyle = '#0a1410'; c.fillRect(0,0,256,96);
+    c.strokeStyle = '#1a2820'; c.lineWidth = 2; c.strokeRect(2,2,252,92);
+    // Faint segment ghosts
+    c.font = 'bold 64px "Roboto Mono", monospace';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = 'rgba(120,255,140,0.05)'; c.fillText('888', 128, 50);
+    // Live value
+    c.fillStyle = '#9cff9c';
+    c.shadowColor = '#7cff7c'; c.shadowBlur = 8;
+    c.fillText(String(Math.round(mph)).padStart(3,' '), 128, 50);
+    c.shadowBlur = 0;
+    c.font = 'bold 14px "Orbitron", sans-serif'; c.fillStyle = '#5acd6e';
+    c.fillText('MPH', 220, 78);
+  }
+  drawSpeedDigits(0);
+  const speedDigitsTex = new THREE.CanvasTexture(speedDigitsCanvas);
+  speedDigitsTex.colorSpace = THREE.SRGBColorSpace;
+  const speedDigitsBezel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.20, 0.08, 0.025),
+    new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.5, metalness: 0.4 })
+  );
+  speedDigitsBezel.position.set(-0.62, clusterY - 0.005, clusterZ + 0.23);
+  speedDigitsBezel.rotation.x = 0.12;
+  g.add(speedDigitsBezel);
+  const speedDigitsScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.18, 0.066),
+    new THREE.MeshStandardMaterial({
+      map: speedDigitsTex, emissive: 0x224422, emissiveMap: speedDigitsTex, emissiveIntensity: 0.9, roughness: 0.6
+    })
+  );
+  speedDigitsScreen.position.set(-0.62, clusterY + 0.005, clusterZ + 0.23);
+  speedDigitsScreen.rotation.x = -PI/2 + 0.12;
+  g.add(speedDigitsScreen);
+
+  // Duplex pressure gauge (centre-right) — primary RED needle = brake cylinder,
+  // secondary BLACK needle = brake pipe. This twin-needle layout is characteristic
+  // of the Class 333 cab.
   const press = makeGauge({
-    label: 'BAR', units: 'BC PRESS', max: 5, majorEvery: 1, minorEvery: 0.2,
-    yellowFrom: 4, redFrom: 4.5, radius: 0.13, subLabel: 'BRAKE CYL'
+    label: 'BAR', units: 'BC / BP', max: 5, majorEvery: 1, minorEvery: 0.2,
+    yellowFrom: 4, redFrom: 4.5, radius: 0.14, subLabel: 'BRAKE',
+    secondNeedleColor: 0x111111
   });
   press.group.position.set(0.55, clusterY, clusterZ);
   press.group.rotation.x = 0.12;
   g.add(press.group);
 
-  // Main reservoir pressure (right)
+  // Main reservoir pressure (right) — slightly smaller secondary gauge
   const mr = makeGauge({
     label: 'BAR', units: 'MR PRESS', max: 12, majorEvery: 2, minorEvery: 0.5,
-    redFrom: 0, yellowFrom: 6.5, radius: 0.13, sweepFrom: PI*0.75, sweepTo: PI*2.25,
+    redFrom: 0, yellowFrom: 6.5, radius: 0.12, sweepFrom: PI*0.75, sweepTo: PI*2.25,
     subLabel: 'MAIN RES'
   });
-  // override redFrom semantics: red below 6.5 — easier to fake by drawing a fixed yellow band
   mr.group.position.set(1.05, clusterY, clusterZ);
   mr.group.rotation.x = 0.12;
   g.add(mr.group);
@@ -1770,8 +1852,100 @@ const cab = (function buildCab(){
   const awsMat = new THREE.MeshStandardMaterial({ map: awsTexN, roughness: 0.5 });
   const aws = new THREE.Mesh(new THREE.CircleGeometry(0.07, 32), awsMat);
   aws.rotation.x = tiltX;
-  aws.position.set(-0.18, clusterY + 0.005, clusterZ);
+  aws.position.set(-0.30, clusterY + 0.005, clusterZ + 0.04);
   g.add(aws);
+  // AWS reset button — small black mushroom just to the right of the sunflower
+  const awsResetBtn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.026, 0.025, 16),
+    new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.55, metalness: 0.25 })
+  );
+  awsResetBtn.position.set(-0.18, clusterY + 0.012, clusterZ + 0.04);
+  awsResetBtn.rotation.x = 0.12;
+  g.add(awsResetBtn);
+
+  // ==== DRA — Driver's Reminder Appliance (large red illuminated mushroom) ====
+  // The DRA is the most recognisable cab safety control on UK trains: when
+  // pushed in, it shows a prominent red light and inhibits traction. Drivers
+  // set it whenever stopped at a signal so traction can't be applied
+  // accidentally on a held aspect.
+  const draBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.050, 0.02, 24),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.5, metalness: 0.35 })
+  );
+  draBase.position.set(-0.04, clusterY + 0.01, clusterZ + 0.04);
+  draBase.rotation.x = 0.12;
+  g.add(draBase);
+  // Mushroom cap — emissive red (intensity driven by GS.dra in the anim loop)
+  const draMat = new THREE.MeshStandardMaterial({
+    color: 0xff2020, emissive: 0x440000, emissiveIntensity: 0.4, roughness: 0.45, metalness: 0.1
+  });
+  const draCap = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 0.030, 24), draMat);
+  draCap.position.set(-0.04, clusterY + 0.035, clusterZ + 0.04);
+  draCap.rotation.x = 0.12;
+  g.add(draCap);
+  // 'DRA' label plate beneath
+  const draLabelTex = (() => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 32;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,128,32);
+    ctx.strokeStyle = '#404952'; ctx.lineWidth = 2; ctx.strokeRect(1,1,126,30);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 18px Orbitron, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('DRA', 64, 16);
+    return new THREE.CanvasTexture(c);
+  })();
+  const draPlate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.10, 0.025),
+    new THREE.MeshBasicMaterial({ map: draLabelTex })
+  );
+  draPlate.position.set(-0.04, clusterY + 0.005, clusterZ - 0.06);
+  draPlate.rotation.x = -PI/2 + 0.12;
+  g.add(draPlate);
+
+  // ==== TPWS panel — distinctive yellow-bordered safety unit with three lit buttons ====
+  // Layout matches the standard TPWS+ DMI: TRAIN STOP OVERRIDE (yellow),
+  // BRAKE DEMAND (red, illuminates after intervention), TEMP ISOLATION (yellow).
+  const tpwsTex = (() => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+    const ctx = c.getContext('2d');
+    // Yellow border / black inner — the classic TPWS livery
+    ctx.fillStyle = '#f4c41a'; ctx.fillRect(0,0,512,256);
+    ctx.fillStyle = '#0d0e10'; ctx.fillRect(20,20,472,216);
+    // Header bar
+    ctx.fillStyle = '#f4c41a'; ctx.fillRect(20,20,472,40);
+    ctx.fillStyle = '#0d0e10'; ctx.font = 'bold 22px Orbitron, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('T P W S', 256, 40);
+    // Button labels under each button position
+    ctx.fillStyle = '#f4c41a'; ctx.font = 'bold 13px Roboto Mono, monospace';
+    ctx.fillText('TRAIN STOP', 100, 196);
+    ctx.fillText('OVERRIDE',  100, 214);
+    ctx.fillText('BRAKE',     256, 196);
+    ctx.fillText('DEMAND',    256, 214);
+    ctx.fillText('TEMPORARY', 412, 196);
+    ctx.fillText('ISOLATION', 412, 214);
+    return new THREE.CanvasTexture(c);
+  })();
+  const tpwsBezel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.30, 0.16, 0.02),
+    new THREE.MeshStandardMaterial({ map: tpwsTex, roughness: 0.65 })
+  );
+  tpwsBezel.position.set(0.20, clusterY + 0.005, clusterZ + 0.04);
+  tpwsBezel.rotation.x = -PI/2 + 0.12;
+  g.add(tpwsBezel);
+  // Three illuminated buttons sit just above the labels
+  function tpwsBtn(x, color){
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.020, 0.015, 18),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.15, roughness: 0.4 })
+    );
+    cap.position.set(x, clusterY + 0.020, clusterZ + 0.05);
+    cap.rotation.x = 0.12;
+    g.add(cap);
+    return cap;
+  }
+  const tpwsBtnOverride  = tpwsBtn(0.115, 0xf0c020);
+  const tpwsBtnBrakeDem  = tpwsBtn(0.200, 0x551515);   // dark until armed
+  const tpwsBtnIsolation = tpwsBtn(0.285, 0xf0c020);
 
   // Status indicators panel — labelled LEDs
   // Builds a tile with a label and a coloured dot. Returns { ring, dot }.
@@ -1946,26 +2120,255 @@ const cab = (function buildCab(){
   hornPaddle.rotation.x = 0.12;
   g.add(hornPaddle);
 
+  // ==== Emergency Brake Plunger — large red shrouded mushroom (right of master controller) ====
+  // The EBP is the single most prominent control in any UK driving cab.
+  // A black plastic shroud surrounds the mushroom to prevent accidental knocks.
+  const ebpShroud = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.085, 0.05, 24),
+    new THREE.MeshStandardMaterial({ color: 0x101114, roughness: 0.65, metalness: 0.25 })
+  );
+  ebpShroud.position.set(0.62, 1.16, -0.85);
+  g.add(ebpShroud);
+  const ebpStem = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.030, 0.030, 0.04, 18),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.5, metalness: 0.3 })
+  );
+  ebpStem.position.set(0.62, 1.20, -0.85);
+  g.add(ebpStem);
+  const ebpCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.060, 0.052, 0.025, 24),
+    new THREE.MeshStandardMaterial({ color: 0xc2191c, emissive: 0x300000, roughness: 0.45, metalness: 0.15 })
+  );
+  ebpCap.position.set(0.62, 1.22, -0.85);
+  g.add(ebpCap);
+  // EBP label plate
+  const ebpLblTex = (() => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#f4c41a'; ctx.fillRect(0,0,256,64);
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(2,2,252,60);
+    ctx.fillStyle = '#0d0e10'; ctx.font = 'bold 18px Orbitron, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('EMERGENCY', 128, 22);
+    ctx.fillText('BRAKE', 128, 44);
+    return new THREE.CanvasTexture(c);
+  })();
+  const ebpPlate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.14, 0.035),
+    new THREE.MeshBasicMaterial({ map: ebpLblTex })
+  );
+  ebpPlate.position.set(0.62, 1.142, -0.78);
+  ebpPlate.rotation.x = -PI/2;
+  g.add(ebpPlate);
+
+  // ==== GSM-R cab radio (left console, mounted high on the bulkhead) ====
+  // Looks like a chunky Funkwerk MESA — rectangular case with green LCD strip
+  // and a 4-row keypad. Visual only.
+  const gsmrCase = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.20, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.7, metalness: 0.15 })
+  );
+  gsmrCase.position.set(-1.40, 1.55, -0.50);
+  gsmrCase.rotation.y = 0.35;     // angled toward the driver
+  g.add(gsmrCase);
+  const gsmrFaceTex = (() => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 384;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1d1f22'; ctx.fillRect(0,0,512,384);
+    // Header bezel
+    ctx.fillStyle = '#0d0f12'; ctx.fillRect(20,20,472,30);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 16px Orbitron'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('GSM-R   CAB RADIO', 36, 35);
+    // LCD screen
+    ctx.fillStyle = '#0a1410'; ctx.fillRect(20,60,472,90);
+    ctx.fillStyle = '#9cff9c'; ctx.font = 'bold 22px Roboto Mono, monospace';
+    ctx.fillText('2L42  LDS-SKI', 36, 90);
+    ctx.fillStyle = '#5acd6e'; ctx.font = '16px Roboto Mono';
+    ctx.fillText('SIGNALLER  CONTACT', 36, 118);
+    ctx.fillText('RDY', 420, 118);
+    // Keypad — 4 rows x 4 keys, with a labelled function row
+    const keys = [
+      ['1','2','3','REG'],
+      ['4','5','6','SOS'],
+      ['7','8','9','END'],
+      ['*','0','#','ACK']
+    ];
+    ctx.font = 'bold 22px Orbitron';
+    for (let r = 0; r < 4; r++){
+      for (let k = 0; k < 4; k++){
+        const x = 30 + k*120, y = 175 + r*52;
+        ctx.fillStyle = (keys[r][k] === 'SOS') ? '#a01818' : '#2a2c2f';
+        ctx.fillRect(x, y, 100, 42);
+        ctx.strokeStyle = '#3a4350'; ctx.lineWidth = 2; ctx.strokeRect(x, y, 100, 42);
+        ctx.fillStyle = (keys[r][k] === 'SOS') ? '#fff8d8' : '#cfd9e4';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(keys[r][k], x+50, y+22);
+      }
+    }
+    return new THREE.CanvasTexture(c);
+  })();
+  const gsmrFace = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.24, 0.18),
+    new THREE.MeshStandardMaterial({ map: gsmrFaceTex, emissive: 0x101820, emissiveMap: gsmrFaceTex, emissiveIntensity: 0.3, roughness: 0.7 })
+  );
+  gsmrFace.position.set(-1.40, 1.55, -0.50);
+  gsmrFace.rotation.y = 0.35;
+  // Push the face out by the case half-depth along the rotated normal
+  gsmrFace.translateZ(0.031);
+  g.add(gsmrFace);
+
+  // ==== Door release buttons (illuminated L / R, sit on the desk to the right of the master controller) ====
+  function doorBtn(label, x, color){
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(0.10, 0.04, 0.10),
+      new THREE.MeshStandardMaterial({ color: 0x1a1c1f, roughness: 0.6 })
+    );
+    housing.position.set(x, 1.085, -0.78);
+    housing.rotation.x = 0.12;
+    g.add(housing);
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, 0.012, 0.07),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.15, roughness: 0.45 })
+    );
+    cap.position.set(x, 1.105, -0.78);
+    cap.rotation.x = 0.12;
+    g.add(cap);
+    // Label
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.clearRect(0,0,64,64);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 36px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, 32, 32);
+    const tex = new THREE.CanvasTexture(c);
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.05, 0.05),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+    );
+    plate.position.set(x, 1.112, -0.78);
+    plate.rotation.x = -PI/2 + 0.12;
+    g.add(plate);
+    return cap;
+  }
+  const doorBtnL = doorBtn('L', -0.32, 0x2a3038);
+  const doorBtnR = doorBtn('R', -0.20, 0x2a3038);
+
+  // ==== Reverser key switch (small panel between switches and door buttons) ====
+  const revHousing = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.04, 0.10),
+    new THREE.MeshStandardMaterial({ color: 0x16181a, roughness: 0.6 })
+  );
+  revHousing.position.set(-0.46, 1.085, -0.78);
+  revHousing.rotation.x = 0.12;
+  g.add(revHousing);
+  const revKey = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.05, 12),
+    new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.85, roughness: 0.25 })
+  );
+  revKey.position.set(-0.46, 1.115, -0.78);
+  revKey.rotation.x = 0.12;
+  g.add(revKey);
+  const revPlateTex = (() => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 32;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,128,32);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 14px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('R   N   F', 64, 16);
+    return new THREE.CanvasTexture(c);
+  })();
+  const revPlate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.075, 0.02),
+    new THREE.MeshBasicMaterial({ map: revPlateTex })
+  );
+  revPlate.position.set(-0.46, 1.108, -0.74);
+  revPlate.rotation.x = -PI/2 + 0.12;
+  g.add(revPlate);
+
+  // ==== Sander + Pantograph buttons (small black/yellow buttons on the pedestal apron) ====
+  function smallBtn(x, color){
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.016, 0.012, 14),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 })
+    );
+    m.position.set(x, 1.142, -0.66);
+    g.add(m);
+  }
+  smallBtn(-0.10, 0xf0c020);   // sander (yellow)
+  smallBtn(-0.04, 0x1a1a1c);   // pantograph reset (black)
+  smallBtn( 0.04, 0x1a1a1c);   // pantograph up (black)
+  smallBtn( 0.10, 0xc2191c);   // bell / passenger alarm reset (red)
+
+  // ==== Paperwork shelf above the gauges — a small ledge for the schedule card ====
+  const shelf = new THREE.Mesh(
+    new THREE.BoxGeometry(1.9, 0.02, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.8 })
+  );
+  shelf.position.set(0, clusterY + 0.16, clusterZ - 0.06);
+  shelf.rotation.x = 0.10;
+  g.add(shelf);
+  // A printed schedule card resting on the shelf — gives the cab a "lived-in" feel
+  const schedTex = (() => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#f6efd8'; ctx.fillRect(0,0,512,96);
+    ctx.strokeStyle = '#7a6d4a'; ctx.lineWidth = 2; ctx.strokeRect(2,2,508,92);
+    ctx.fillStyle = '#1a1a1c'; ctx.font = 'bold 16px Roboto Mono'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('2L42  LEEDS → SKIPTON   AIREDALE LINE', 14, 18);
+    ctx.font = '13px Roboto Mono';
+    ctx.fillText('LDS 00:00  KLF 08:00  APY 12:00  SHY 17:00', 14, 40);
+    ctx.fillText('SAE 19:00  BIY 23:00  CFL 25:00  KEI 29:00', 14, 58);
+    ctx.fillText('SON 32:00  CEY 35:00  SKI 43:00', 14, 76);
+    return new THREE.CanvasTexture(c);
+  })();
+  const schedCard = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.50, 0.09),
+    new THREE.MeshBasicMaterial({ map: schedTex })
+  );
+  schedCard.position.set(-0.65, clusterY + 0.175, clusterZ - 0.04);
+  schedCard.rotation.x = -PI/2 + 0.10;
+  g.add(schedCard);
+
+  // Apply the moulded panel-line texture to the dashboard slab face for a more
+  // realistic surface (replace the single-tone material on the dash mesh added earlier).
+  // We do this by adding a thin overlay plate on top of the dashboard slab so we
+  // don't disturb the existing collision-style geometry.
+  const dashOverlay = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.36, 1.02),
+    dashTopMat
+  );
+  dashOverlay.position.set(0, 1.262, -1.13);
+  dashOverlay.rotation.x = -PI/2 + 0.12;
+  g.add(dashOverlay);
+
   // ==== Side-window frames (sliding cab sides) ====
   const sideMat = new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.6, metalness: 0.2 });
   const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.0, 0.9), sideMat);
   sideL.position.set(-1.65, 1.55, -0.10);
   g.add(sideL);
   const sideR = sideL.clone(); sideR.position.set(1.65, 1.55, -0.10); g.add(sideR);
+  // Grab handle on the cab side bulkhead — small detail visible in peripheral vision
+  const grabMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.85, roughness: 0.3 });
+  const grabL = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.012, 8, 16, PI), grabMat);
+  grabL.rotation.set(0, PI/2, 0);
+  grabL.position.set(-1.60, 2.10, -0.30);
+  g.add(grabL);
 
   // Aliases for existing code paths
   const speedoNeedle = speedo.needle;
   const pressNeedle  = press.needle;
+  const pressNeedle2 = press.needle2;     // brake-pipe needle (duplex gauge)
   const mrNeedle     = mr.needle;
 
   return {
     group: g,
-    speedoNeedle, pressNeedle, mrNeedle,
+    speedoNeedle, pressNeedle, pressNeedle2, mrNeedle,
     lever, notchDot,
     awsMat, awsTexN, awsTexW,
     ledHead, ledDoor, ledDsd, ledTpws, ledRgs, ledHorn,
     swHead, swWipers, swCabLight,
     wL, wR,
+    draMat, draCap,
+    tpwsBtnOverride, tpwsBtnBrakeDem, tpwsBtnIsolation,
+    doorBtnL, doorBtnR,
+    speedDigitsCanvas, speedDigitsCtx, speedDigitsTex, drawSpeedDigits,
   };
 })();
 cabGroup.add(cab.group);
@@ -2113,6 +2516,9 @@ const GS = {
   headlights: false,
   wipers: false,
   wiperPhase: 0,
+  dra: false,                // Driver's Reminder Appliance — when set, traction inhibited & lamp glows
+  tpwsBrakeDemand: false,    // TPWS brake-demand light (illuminates after AWS-emergency or SPAD)
+  doorReleaseSide: 'none',   // 'none' | 'L' | 'R' — which platform door release is armed
   signalAhead: null,         // SIGNALS entry just ahead
   nextSignalIdx: 0,
   demo: false,               // autopilot drives the train when true
@@ -2136,7 +2542,10 @@ const NOTCH_KEYS = {
   'ArrowLeft': -1, 'KeyA': -1,
 };
 function bumpNotch(delta){
-  GS.notch = clamp(GS.notch + delta, -6, T333.powerNotches - 1);
+  let next = clamp(GS.notch + delta, -6, T333.powerNotches - 1);
+  // DRA inhibits traction — clamp at OFF when set
+  if (GS.dra && next > 0) next = 0;
+  GS.notch = next;
   flashLever();
 }
 let leverFlashT = 0;
@@ -2151,6 +2560,13 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyE') dsdReset();
   if (e.code === 'KeyL') { GS.headlights = !GS.headlights; cab.ledHead.material.color.setHex(GS.headlights?0x9cffaf:0x222222); }
   if (e.code === 'KeyV') GS.wipers = !GS.wipers;
+  if (e.code === 'KeyR') {
+    // Toggle Driver's Reminder Appliance. When set, traction is inhibited:
+    // any positive notch is forced back to OFF and a warning is shown.
+    GS.dra = !GS.dra;
+    if (GS.dra && GS.notch > 0) { GS.notch = 0; flashLever(); }
+    showMsg(GS.dra ? 'DRA SET — TRACTION INHIBITED' : 'DRA CANCELLED', GS.dra ? 'warn' : 'ok', 1.0);
+  }
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   if (e.code === 'Space') { GS.notch = -6; flashLever(); }
   if (e.code === 'KeyH') { GS.horn = true; GS.hornHigh = true; }
@@ -2216,6 +2632,13 @@ function awsReset(){
     GS.awsBell = true;
     cab.awsMat.map = cab.awsTexN; cab.awsMat.needsUpdate = true;
     setTimeout(()=>{ GS.awsBell = false; }, 600);
+  }
+  // After a TPWS brake demand the driver must come to a stand and then reset.
+  // We allow the AWS reset key to also clear the TPWS lamp once stationary —
+  // matches the real TPWS+ reset procedure on UK EMUs.
+  if (GS.tpwsBrakeDemand && GS.v < 0.1){
+    GS.tpwsBrakeDemand = false;
+    showMsg('TPWS RESET', 'ok', 1.5);
   }
 }
 function dsdReset(){
@@ -2481,15 +2904,42 @@ function updateCabAnim(dt){
   const aSpd = (PI*0.75) + tSpd * (PI*1.5);
   cab.speedoNeedle.rotation.set(-PI/2, 0, -PI/2 - aSpd);
 
-  // Brake-cylinder pressure proxy (0..5 bar). Rises with brake notch.
+  // Duplex pressure gauge:
+  //  • Red needle  = brake cylinder (BC) — rises with brake demand
+  //  • Black needle = brake pipe (BP)    — drops as brakes apply (5→3.5 bar)
   const pBar = clamp((GS.notch < 0 ? -GS.notch : 0), 0, 5);
   const aP = (PI*0.75) + (pBar / 5) * (PI*1.5);
   cab.pressNeedle.rotation.set(-PI/2, 0, -PI/2 - aP);
+  if (cab.pressNeedle2){
+    const bp = clamp(5.0 - pBar * 0.25, 3.4, 5.0);
+    const aBP = (PI*0.75) + (bp / 5) * (PI*1.5);
+    cab.pressNeedle2.rotation.set(-PI/2, 0, -PI/2 - aBP);
+  }
 
   // Main-reservoir pressure (0..12 bar). Sits steady around 9 bar with a wobble.
   const mrBar = 8.8 + sin(GS.serviceTime * 0.6) * 0.15;
   const aMR = (PI*0.75) + (mrBar / 12) * (PI*1.5);
   cab.mrNeedle.rotation.set(-PI/2, 0, -PI/2 - aMR);
+
+  // DRA lamp — emissive glow when set, dim when cancelled
+  if (cab.draMat){
+    cab.draMat.emissiveIntensity = GS.dra ? 1.6 : 0.05;
+    cab.draMat.color.setHex(GS.dra ? 0xff3030 : 0x802020);
+  }
+
+  // TPWS brake-demand lamp — illuminates while AWS emergency in effect
+  if (cab.tpwsBtnBrakeDem){
+    const lit = GS.tpwsBrakeDemand;
+    cab.tpwsBtnBrakeDem.material.color.setHex(lit ? 0xff3030 : 0x551515);
+    cab.tpwsBtnBrakeDem.material.emissive.setHex(lit ? 0xff2020 : 0x000000);
+    cab.tpwsBtnBrakeDem.material.emissiveIntensity = lit ? 1.6 : 0.0;
+  }
+
+  // Digital speed readout — repaint each frame
+  if (cab.drawSpeedDigits && cab.speedDigitsTex){
+    cab.drawSpeedDigits(GS.v * MS_TO_MPH);
+    cab.speedDigitsTex.needsUpdate = true;
+  }
 
   // Master controller lever — tilt forward/back, plus brief colour flash on change
   const ln = GS.notch / 6;        // -1..+0.66
@@ -2638,6 +3088,7 @@ function loop(){
         if (GS.awsTimer > 2.7){
           GS.notch = -6;
           GS.awsFails++;
+          GS.tpwsBrakeDemand = true;     // TPWS BRAKE DEMAND lamp lights
           showMsg('AWS NOT ACKNOWLEDGED — EMERGENCY BRAKE', 'bad', 4.0);
           GS.score -= 80;
           GS.awsArmed = false;

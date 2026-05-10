@@ -38,14 +38,35 @@ the platform). Halt with the cab beside the marker for a perfect stop.
 | Space | Emergency brake (B6) |
 | H | Horn (high tone) |
 | J | Horn (low tone) |
-| Q | AWS reset |
+| Q | AWS reset / TPWS reset (when stopped) |
 | E | DSD reset |
+| R | DRA — set / cancel (inhibits traction when set) |
 | L | Headlights |
 | V | Wipers |
 | P / Esc | Pause |
 | F + drag | Look around the cab |
 
 On mobile, on-screen pads provide power, brake, horn, AWS reset and pause.
+
+## Cab Fittings
+
+The driver's cab is modelled on the real **Class 333** unit and includes:
+
+- **Speedometer** with chrome bezel and a **digital LCD speed readout** below
+- **Duplex pressure gauge** — red needle for brake-cylinder, black needle for brake-pipe
+- **Main reservoir** pressure gauge
+- **AWS sunflower** with reset mushroom
+- **DRA** (Driver's Reminder Appliance) — large illuminated red mushroom; when set, prevents traction
+- **TPWS panel** — yellow-trimmed unit with TRAIN STOP OVERRIDE, BRAKE DEMAND (illuminates on intervention) and TEMPORARY ISOLATION buttons
+- **Emergency Brake Plunger** — large red shrouded mushroom right of the master controller
+- **GSM-R cab radio** with green LCD and 4×4 keypad on the left bulkhead
+- **Door release** L / R buttons, **reverser key switch** (R / N / F), **sander** and **pantograph** buttons
+- **Headlights / wipers / cab-light** toggle switches
+- **Yellow horn paddle** on the left dashboard
+- **Master controller** lever with detented strip showing P1–P4 / OFF / B1–B5 / EB
+- **TMS / driver display** screen on the left of the dash showing service info
+- **Paperwork shelf** above the gauges with the printed schedule card
+- **Grab handle** on the cab side, sun visors, A-pillars, headliner and side-window frames
 
 ## Demo Mode
 
@@ -73,7 +94,6 @@ The menu's **DEMO RUN ×2** button starts an autopilot that drives the route end
 - v2: Wharfedale branch (Shipley → Ilkley) selectable from the menu
 - Additional rolling stock: Class 195, Class 331/0
 - Real audio recordings (CC-BY) replacing synthesised audio
-- Better cab fidelity using CC-licensed cab reference photos
 - Day / night / weather presets
 - Save best-time leaderboard (local storage)
 
