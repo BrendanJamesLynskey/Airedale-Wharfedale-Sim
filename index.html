@@ -2481,23 +2481,49 @@ const cab = (function buildCab(){
   sideUpperWall(-1.65); sideUpperWall(1.65);
   sideRearPillar(-1.65); sideRearPillar(1.65);
 
-  // Pre-existing window-frame slabs (kept for the inside trim around the aperture)
-  const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.92), sideMat);
-  sideL.position.set(-1.66, 1.55, -0.10);
-  g.add(sideL);
-  const sideR = sideL.clone(); sideR.position.set(1.66, 1.55, -0.10); g.add(sideR);
-
-  // Side-window glass — semi-transparent panes set in the apertures
+  // Side-window glass — clear panes so the driver can see out when looking left
+  // or right. The aperture is framed by the lower wall (y<1.05), upper wall
+  // (y>2.05), the A-pillar at z≈-0.55, and the rear pillar at z≈0.60. Earlier
+  // versions filled the aperture with a 4 cm dark slab as a "window frame"; that
+  // slab blocked the view, so the user reported the cab feeling sealed off.
+  // A very faint blue tint (5% opacity) suggests glazing without obstructing
+  // the view.
   const sideGlassMat = new THREE.MeshBasicMaterial({
-    color: 0xc4d8e2, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false
+    color: 0xeaf3f8, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false
   });
-  const sideGlassL = new THREE.Mesh(new THREE.PlaneGeometry(0.88, 0.95), sideGlassMat);
+  // Aperture: y in [1.05, 2.05] (height 1.00), z in [-0.46, 0.35] (width 0.81).
+  // Centre at y=1.55, z=-0.055.
+  const sideGlassL = new THREE.Mesh(new THREE.PlaneGeometry(0.81, 1.00), sideGlassMat);
   sideGlassL.rotation.y = PI/2;
-  sideGlassL.position.set(-1.63, 1.55, -0.10);
+  sideGlassL.position.set(-1.64, 1.55, -0.055);
   g.add(sideGlassL);
   const sideGlassR = sideGlassL.clone();
-  sideGlassR.position.set(1.63, 1.55, -0.10);
+  sideGlassR.position.set(1.64, 1.55, -0.055);
   g.add(sideGlassR);
+
+  // Thin chrome trim around the inside of the aperture (top + bottom + front +
+  // rear edges) — gives the window a "framed" look without sealing it shut.
+  const trimMatChrome = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.85, roughness: 0.30 });
+  function windowTrim(x){
+    const sgn = Math.sign(x);
+    // Top trim (along z)
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.020, 0.85), trimMatChrome);
+    top.position.set(x - sgn * 0.005, 2.05, -0.055);
+    g.add(top);
+    // Bottom trim (along z)
+    const bot = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.020, 0.85), trimMatChrome);
+    bot.position.set(x - sgn * 0.005, 1.05, -0.055);
+    g.add(bot);
+    // Front (driver-side) trim (along y) — lies just behind the A-pillar
+    const front = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.02, 0.020), trimMatChrome);
+    front.position.set(x - sgn * 0.005, 1.55, -0.460);
+    g.add(front);
+    // Rear trim (along y) — lies just in front of the rear pillar
+    const rear = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.02, 0.020), trimMatChrome);
+    rear.position.set(x - sgn * 0.005, 1.55, 0.350);
+    g.add(rear);
+  }
+  windowTrim(-1.64); windowTrim(1.64);
 
   // ==== Rear bulkhead — solid wall behind the driver with the saloon door ====
   // Texture is painted procedurally: a centred door panel with handle, a small
