@@ -1693,32 +1693,97 @@ const cab = (function buildCab(){
   kneeRoll.position.set(0, 0.83, -1.40);
   g.add(kneeRoll);
 
-  // Floor with dark non-slip mat texture (procedural)
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 2.2), floorMat);
-  floor.position.set(0, 0.0, -0.5);
+  // Floor with studded non-slip rubber mat — procedural texture mimics the
+  // raised-disc rubber matting fitted to UK EMU cabs. Extends from windscreen
+  // back to the rear bulkhead.
+  const floorTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,256,256);
+    // Studded discs in a grid
+    for (let y = 8; y < 256; y += 20){
+      for (let x = (y/20 % 2 === 0 ? 8 : 18); x < 256; x += 20){
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, PI*2);
+        ctx.fillStyle = '#23272b'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x-1, y-1, 5, 0, PI*2);
+        ctx.fillStyle = '#2c3034'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 1.5, 0, PI*2);
+        ctx.fillStyle = '#0d0e10'; ctx.fill();
+      }
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(8, 6);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const floorTexMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 });
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 2.6), floorTexMat);
+  floor.position.set(0, 0.0, -0.30);
   g.add(floor);
 
-  // Driver's seat back (just a hint of upholstery behind camera so the player feels seated)
-  const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.8, 0.10), seatMat);
-  seatBack.position.set(0, 1.10, 0.50);
-  g.add(seatBack);
-  const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.10, 0.55), seatMat);
-  seatBase.position.set(0, 0.55, 0.30);
+  // Driver's seat — high-back swivel chair with cloth upholstery, headrest and
+  // armrests. Anchored at the driver's x position (-0.7) so the camera looks
+  // forward from the seat. Visible in peripheral vision and when the player
+  // pans the view.
+  const seatX = -0.7;
+  const seatPedestal = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.10, 0.18, 0.45, 16),
+    new THREE.MeshStandardMaterial({ color: 0x14161a, metalness: 0.5, roughness: 0.5 })
+  );
+  seatPedestal.position.set(seatX, 0.225, 0.40);
+  g.add(seatPedestal);
+  const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.55), seatMat);
+  seatBase.position.set(seatX, 0.55, 0.40);
   g.add(seatBase);
+  // Side bolsters on the cushion for a more sculpted look
+  const seatBolL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.50), seatMat);
+  seatBolL.position.set(seatX - 0.275, 0.58, 0.40);
+  g.add(seatBolL);
+  const seatBolR = seatBolL.clone(); seatBolR.position.set(seatX + 0.275, 0.58, 0.40); g.add(seatBolR);
+  // High back
+  const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.10), seatMat);
+  seatBack.position.set(seatX, 1.05, 0.65);
+  g.add(seatBack);
+  // Headrest
+  const seatHead = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.20, 0.10), seatMat);
+  seatHead.position.set(seatX, 1.55, 0.65);
+  g.add(seatHead);
+  // Armrests
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x182230, roughness: 0.8 });
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.40), armMat);
+  armL.position.set(seatX - 0.30, 0.78, 0.40);
+  g.add(armL);
+  const armR = armL.clone(); armR.position.set(seatX + 0.30, 0.78, 0.40); g.add(armR);
+  // Armrest support stems
+  const armStemMat = new THREE.MeshStandardMaterial({ color: 0x202225, metalness: 0.6, roughness: 0.4 });
+  const armStemL = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.20, 10), armStemMat);
+  armStemL.position.set(seatX - 0.30, 0.66, 0.55);
+  g.add(armStemL);
+  const armStemR = armStemL.clone(); armStemR.position.set(seatX + 0.30, 0.66, 0.55); g.add(armStemR);
 
-  // A-pillars (chunky, like the real cab) and roof frame
+  // Secondman jump seat (right side of cab) — fold-down, used by inspectors.
+  const jumpBase = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.08, 0.30), seatMat);
+  jumpBase.position.set(1.30, 0.50, 0.40);
+  g.add(jumpBase);
+  const jumpBack = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.55, 0.06), seatMat);
+  jumpBack.position.set(1.30, 0.80, 0.55);
+  g.add(jumpBack);
+
+  // A-pillars (chunky, like the real cab) and roof frame — roof now extends back
+  // over the driver to the rear bulkhead so looking up doesn't reveal the sky.
   const pillarL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.4, 0.18), frameMat);
   pillarL.position.set(-1.55, 1.5, -0.55);
   g.add(pillarL);
   const pillarR = pillarL.clone(); pillarR.position.set(1.55, 1.5, -0.55); g.add(pillarR);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.18, 1.6), frameMat);
-  roof.position.set(0, 2.55, -1.0);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.18, 2.7), frameMat);
+  roof.position.set(0, 2.55, -0.35);
   g.add(roof);
   const headliner = new THREE.Mesh(
-    new THREE.BoxGeometry(3.2, 0.05, 1.6),
+    new THREE.BoxGeometry(3.2, 0.05, 2.6),
     new THREE.MeshStandardMaterial({ color: 0xe2e1dd, roughness: 0.9 })
   );
-  headliner.position.set(0, 2.45, -1.0);
+  headliner.position.set(0, 2.45, -0.35);
   g.add(headliner);
   // Centre pillar (between two windscreens)
   const cpillar = new THREE.Mesh(new THREE.BoxGeometry(0.10, 2.0, 0.10), frameMat);
@@ -2338,18 +2403,224 @@ const cab = (function buildCab(){
   dashOverlay.rotation.x = -PI/2 + 0.12;
   g.add(dashOverlay);
 
-  // ==== Side-window frames (sliding cab sides) ====
+  // ==== Cab shell — side walls, rear bulkhead and side-window glazing ====
+  // The shell turns the cab from an open desk into a fully enclosed room: the
+  // player can pan their view in any direction (F + drag) and see structure
+  // rather than open sky / track. Built up from simple boxes so each surface
+  // takes the cab's interior lighting cleanly.
+  //
+  //   z axis (cab-local):  -1.7 (windscreen) → +0.85 (rear bulkhead)
+  //   x axis (cab-local):  -1.65 (left wall) → +1.65 (right wall)
+  //   y axis (cab-local):   0    (floor)     → 2.5   (ceiling)
+  //
+  // Side-window aperture spans roughly y=1.05..2.05, z=-0.55..+0.35 — matches the
+  // pre-existing window-frame slab so its trim still wraps the opening.
   const sideMat = new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.6, metalness: 0.2 });
-  const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.0, 0.9), sideMat);
-  sideL.position.set(-1.65, 1.55, -0.10);
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x26282b, roughness: 0.85, metalness: 0.05 });
+  const wallInnerMat = new THREE.MeshStandardMaterial({ color: 0x33373c, roughness: 0.85, metalness: 0.05 });
+  // BackSide so the inside face is what the camera sees — a single plane is
+  // cheaper than a thick box and avoids z-fighting with the seat / shelf.
+  function sideLowerWall(x){
+    // Below side window — full length of the cab interior
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.05, 2.55), wallMat);
+    m.position.set(x, 0.525, -0.35);
+    g.add(m);
+    // Inner skin (lighter grey, slight inset) — visible to the driver
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.00, 2.50), wallInnerMat);
+    inner.position.set(x - Math.sign(x) * 0.025, 0.525, -0.35);
+    g.add(inner);
+    return m;
+  }
+  function sideUpperWall(x){
+    // Above side window — full length
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.45, 2.55), wallMat);
+    m.position.set(x, 2.275, -0.35);
+    g.add(m);
+    return m;
+  }
+  function sideRearPillar(x){
+    // Vertical post between side window and rear bulkhead (z=0.35..0.85)
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.00, 0.50), wallMat);
+    m.position.set(x, 1.55, 0.60);
+    g.add(m);
+    return m;
+  }
+  sideLowerWall(-1.65); sideLowerWall(1.65);
+  sideUpperWall(-1.65); sideUpperWall(1.65);
+  sideRearPillar(-1.65); sideRearPillar(1.65);
+
+  // Pre-existing window-frame slabs (kept for the inside trim around the aperture)
+  const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.92), sideMat);
+  sideL.position.set(-1.66, 1.55, -0.10);
   g.add(sideL);
-  const sideR = sideL.clone(); sideR.position.set(1.65, 1.55, -0.10); g.add(sideR);
+  const sideR = sideL.clone(); sideR.position.set(1.66, 1.55, -0.10); g.add(sideR);
+
+  // Side-window glass — semi-transparent panes set in the apertures
+  const sideGlassMat = new THREE.MeshBasicMaterial({
+    color: 0xc4d8e2, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false
+  });
+  const sideGlassL = new THREE.Mesh(new THREE.PlaneGeometry(0.88, 0.95), sideGlassMat);
+  sideGlassL.rotation.y = PI/2;
+  sideGlassL.position.set(-1.63, 1.55, -0.10);
+  g.add(sideGlassL);
+  const sideGlassR = sideGlassL.clone();
+  sideGlassR.position.set(1.63, 1.55, -0.10);
+  g.add(sideGlassR);
+
+  // ==== Rear bulkhead — solid wall behind the driver with the saloon door ====
+  // Texture is painted procedurally: a centred door panel with handle, a small
+  // vision panel and a 'TO PASSENGER COMPARTMENT' sign. Without this the
+  // backwards view shows directly through the train.
+  const rearWallTex = (() => {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 768;
+    const ctx = c.getContext('2d');
+    // Wall base — slightly textured warm grey
+    const grad = ctx.createLinearGradient(0, 0, 0, 768);
+    grad.addColorStop(0, '#3a3e43'); grad.addColorStop(1, '#26292d');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 1024, 768);
+    for (let i = 0; i < 4000; i++){
+      ctx.fillStyle = 'rgba(255,255,255,' + (Math.random()*0.04) + ')';
+      ctx.fillRect(Math.random()*1024, Math.random()*768, 1, 1);
+    }
+    // Door panel (centred)
+    const dx = 360, dy = 160, dw = 304, dh = 600;
+    ctx.fillStyle = '#2c2f33'; ctx.fillRect(dx, dy, dw, dh);
+    ctx.strokeStyle = '#0d0e10'; ctx.lineWidth = 6; ctx.strokeRect(dx, dy, dw, dh);
+    // Inset door panel detail
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2;
+    ctx.strokeRect(dx + 20, dy + 20, dw - 40, dh - 40);
+    // Vision panel (small rectangular window in the door)
+    const vx = dx + 60, vy = dy + 60, vw = dw - 120, vh = 140;
+    ctx.fillStyle = '#1a2026'; ctx.fillRect(vx, vy, vw, vh);
+    ctx.strokeStyle = '#0d0e10'; ctx.lineWidth = 4; ctx.strokeRect(vx, vy, vw, vh);
+    ctx.strokeStyle = 'rgba(180,210,235,0.18)'; ctx.lineWidth = 2; ctx.strokeRect(vx + 4, vy + 4, vw - 8, vh - 8);
+    // Door handle (vertical bar on the right)
+    ctx.fillStyle = '#9aa0a8'; ctx.fillRect(dx + dw - 70, dy + dh/2 - 70, 14, 140);
+    ctx.fillStyle = '#5a606a'; ctx.fillRect(dx + dw - 70 - 6, dy + dh/2 - 70, 6, 140);
+    // Sign above the door
+    ctx.fillStyle = '#15171a'; ctx.fillRect(dx + 30, dy - 90, dw - 60, 60);
+    ctx.strokeStyle = '#404952'; ctx.lineWidth = 3; ctx.strokeRect(dx + 30, dy - 90, dw - 60, 60);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 22px Orbitron, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('TO PASSENGER COMPARTMENT', dx + dw/2, dy - 60);
+    // CCTV / cab-end equipment box on the left of the door
+    ctx.fillStyle = '#1a1c1f'; ctx.fillRect(80, 220, 180, 180);
+    ctx.strokeStyle = '#0d0e10'; ctx.lineWidth = 4; ctx.strokeRect(80, 220, 180, 180);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 16px Roboto Mono, monospace';
+    ctx.textAlign = 'left'; ctx.fillText('FIRE EXT.', 100, 250);
+    ctx.fillStyle = '#c2191c'; ctx.fillRect(110, 270, 60, 110);
+    ctx.fillStyle = '#1a1a1c'; ctx.fillRect(120, 280, 40, 90);
+    // First-aid box on the right
+    ctx.fillStyle = '#f5f5f0'; ctx.fillRect(770, 220, 170, 180);
+    ctx.strokeStyle = '#0d0e10'; ctx.lineWidth = 4; ctx.strokeRect(770, 220, 170, 180);
+    ctx.fillStyle = '#0a8a3a';
+    ctx.fillRect(820, 270, 70, 22); ctx.fillRect(842, 248, 22, 70);   // green cross
+    ctx.fillStyle = '#0d0e10'; ctx.font = 'bold 18px Roboto Mono';
+    ctx.textAlign = 'center'; ctx.fillText('FIRST AID', 855, 360);
+    return new THREE.CanvasTexture(c);
+  })();
+  rearWallTex.colorSpace = THREE.SRGBColorSpace;
+  rearWallTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const rearWall = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.30, 2.45),
+    new THREE.MeshStandardMaterial({ map: rearWallTex, roughness: 0.85 })
+  );
+  rearWall.position.set(0, 1.225, 0.85);
+  rearWall.rotation.y = PI;     // face inward (toward driver)
+  g.add(rearWall);
+  // Outer back to stop world bleeding through if camera ever clips behind
+  const rearBack = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.30, 2.45),
+    new THREE.MeshStandardMaterial({ color: 0x101113, roughness: 0.9 })
+  );
+  rearBack.position.set(0, 1.225, 0.86);
+  g.add(rearBack);
+  // Door handle as a 3D bar so it catches light separately from the texture
+  const doorHandle = new THREE.Mesh(
+    new THREE.BoxGeometry(0.025, 0.30, 0.020),
+    new THREE.MeshStandardMaterial({ color: 0xb0b6be, metalness: 0.85, roughness: 0.3 })
+  );
+  doorHandle.position.set(0.30, 1.20, 0.832);
+  g.add(doorHandle);
+
   // Grab handle on the cab side bulkhead — small detail visible in peripheral vision
   const grabMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.85, roughness: 0.3 });
   const grabL = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.012, 8, 16, PI), grabMat);
   grabL.rotation.set(0, PI/2, 0);
   grabL.position.set(-1.60, 2.10, -0.30);
   g.add(grabL);
+  // Coat hook on the rear bulkhead (small lived-in detail)
+  const hook = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.08, 8),
+    grabMat
+  );
+  hook.rotation.x = PI/2;
+  hook.position.set(-1.20, 1.85, 0.79);
+  g.add(hook);
+
+  // ==== Overhead cab fan grille — small detail that catches the eye when looking up ====
+  const fanTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1a1c1f'; ctx.fillRect(0,0,256,256);
+    // Concentric grille rings
+    ctx.strokeStyle = '#0d0e10'; ctx.lineWidth = 4;
+    for (let r = 30; r < 120; r += 12){
+      ctx.beginPath(); ctx.arc(128,128, r, 0, PI*2); ctx.stroke();
+    }
+    // Cross spokes
+    ctx.lineWidth = 6; ctx.beginPath();
+    ctx.moveTo(128, 12); ctx.lineTo(128, 244);
+    ctx.moveTo(12, 128); ctx.lineTo(244, 128); ctx.stroke();
+    // Outer bezel
+    ctx.strokeStyle = '#3a4045'; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.arc(128,128, 120, 0, PI*2); ctx.stroke();
+    return new THREE.CanvasTexture(c);
+  })();
+  const fanGrille = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.30, 0.30),
+    new THREE.MeshStandardMaterial({ map: fanTex, roughness: 0.7, metalness: 0.3 })
+  );
+  fanGrille.rotation.x = PI/2;
+  fanGrille.position.set(-0.40, 2.42, -0.30);
+  g.add(fanGrille);
+
+  // Ceiling light strip — long thin diffuser above the dashboard area
+  const ceilLight = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4, 0.04, 0.18),
+    new THREE.MeshStandardMaterial({ color: 0xfff4d8, emissive: 0xfff4d8, emissiveIntensity: 0.4, roughness: 0.6 })
+  );
+  ceilLight.position.set(0, 2.42, -0.95);
+  g.add(ceilLight);
+
+  // ==== Red emergency door release handle — on the rear bulkhead beside the saloon door ====
+  const eDoorHousing = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.16, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xf4c41a, roughness: 0.7 })
+  );
+  eDoorHousing.position.set(-0.50, 1.20, 0.832);
+  g.add(eDoorHousing);
+  const eDoorHandle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.018, 0.018, 0.10, 12),
+    new THREE.MeshStandardMaterial({ color: 0xc2191c, roughness: 0.45, metalness: 0.15 })
+  );
+  eDoorHandle.position.set(-0.50, 1.20, 0.815);
+  g.add(eDoorHandle);
+
+  // Side-window upper slide track — small detail across the top of the window
+  const slideTrackMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.85, roughness: 0.3 });
+  const slideTrackL = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.020, 0.92), slideTrackMat);
+  slideTrackL.position.set(-1.62, 2.04, -0.10);
+  g.add(slideTrackL);
+  const slideTrackR = slideTrackL.clone(); slideTrackR.position.set(1.62, 2.04, -0.10); g.add(slideTrackR);
+
+  // Window-shade roller above each windscreen pane (common UK EMU detail)
+  const shadeMat = new THREE.MeshStandardMaterial({ color: 0x383838, roughness: 0.9 });
+  const shadeL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.95, 12), shadeMat);
+  shadeL.rotation.z = PI/2;
+  shadeL.position.set(-0.55, 2.30, -1.05);
+  g.add(shadeL);
+  const shadeR = shadeL.clone(); shadeR.position.set(0.55, 2.30, -1.05); g.add(shadeR);
 
   // Aliases for existing code paths
   const speedoNeedle = speedo.needle;
