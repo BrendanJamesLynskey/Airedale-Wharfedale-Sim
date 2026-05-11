@@ -316,6 +316,29 @@ const routePts = (function buildRoutePts(){
     out.push({ km: sp.km, X: p.X, Z: p.Z, elev: lerp(lo.elev, hi.elev, smoothstep(0, 1, t)) });
   }
   out.sort((a, b) => a.km - b.km);
+  // Add ghost neighbours one segment before pts[0] and one segment after the
+  // final point. Without them, Catmull-Rom's last (and first) segments use
+  // i3 = i2 = pts[last] (and i0 = i1 = pts[0]) — a degenerate fourth control
+  // point that collapses the curve's parametric speed near the endpoints. In
+  // practice this made Skipton's 200 m platform render as a ~30 m sliver
+  // crammed up against km=41.80, so the user could not see the station when
+  // arriving. The ghost points are linear continuations of the first / last
+  // real segment, never sampled directly by the player route — they only
+  // exist to give the spline well-defined neighbours.
+  const first = out[0], second = out[1];
+  const last = out[out.length - 1], penult = out[out.length - 2];
+  out.unshift({
+    km: first.km - (second.km - first.km),
+    X: first.X - (second.X - first.X),
+    Z: first.Z - (second.Z - first.Z),
+    elev: first.elev - (second.elev - first.elev),
+  });
+  out.push({
+    km: last.km + (last.km - penult.km),
+    X: last.X + (last.X - penult.X),
+    Z: last.Z + (last.Z - penult.Z),
+    elev: last.elev + (last.elev - penult.elev),
+  });
   return out;
 })();
 
