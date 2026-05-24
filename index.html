@@ -3974,15 +3974,20 @@ function audioTick(state, dt){
   const ctx = AUDIO.ctx;
   // Traction: gain ramps with throttle*speed; pitch with speed. Per-train tuning
   // (oscillator pitch slope, filter sweep) comes from GS.train.audio.
+  // Pitch and filter sweep are clamped at 50 mph: real inverter drives reach
+  // their top synchronous-PWM frequency around this point and hold there at
+  // line speed, so continuing the sweep up to 100 mph made the whine sound
+  // unnaturally siren-like.
   const ta = GS.train.audio;
   const speed = state.v;
+  const pitchSpeed = min(speed, 50 * MPH_TO_MS);    // m/s equivalent of 50 mph
   const power = max(0, state.notch);    // notch >0 = power
   const tractionTarget = power * ta.tractionGainScale * smoothstep(0.5, 25, speed);
   AUDIO.tractionGain.gain.linearRampToValueAtTime(tractionTarget, ctx.currentTime + 0.15);
-  const baseHz = ta.tractionOsc1BaseHz - 10 + speed * ta.tractionPitchPerMs;
+  const baseHz = ta.tractionOsc1BaseHz - 10 + pitchSpeed * ta.tractionPitchPerMs;
   AUDIO.tractionOsc1.frequency.linearRampToValueAtTime(baseHz, ctx.currentTime + 0.2);
   AUDIO.tractionOsc2.frequency.linearRampToValueAtTime(baseHz * ta.tractionOsc2Ratio, ctx.currentTime + 0.2);
-  AUDIO.tractionFilter.frequency.linearRampToValueAtTime(ta.tractionFilterBase + speed * ta.tractionFilterPerMs, ctx.currentTime + 0.2);
+  AUDIO.tractionFilter.frequency.linearRampToValueAtTime(ta.tractionFilterBase + pitchSpeed * ta.tractionFilterPerMs, ctx.currentTime + 0.2);
 
   // Brake hiss: gain ramps with brake notch, only above standstill
   const brake = max(0, -state.notch);
