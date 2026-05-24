@@ -1,10 +1,25 @@
-# Airedale & Wharfedale Line — Class 333 Driver Simulator
+# Airedale & Wharfedale Line — Driver Simulator
 
 A browser-based train driver simulator for the Airedale and Wharfedale lines
 in West Yorkshire, England. v1 covers the full **Leeds → Skipton** Airedale
-service (11 stations, 41.8 km) driving a **British Rail Class 333** EMU.
+service (11 stations, 41.8 km), with selectable **Class 333** or **Class 331/0**
+EMUs.
 
 [Play it here](https://brendanjameslynskey.github.io/Airedale-Wharfedale-Sim/)
+
+## Rolling Stock
+
+The menu lets you pick which unit to drive. Each is modelled with its own
+physics, full cab interior and audio signature:
+
+| Unit | Cars | Length | Mass | Cab style |
+|------|------|--------|------|-----------|
+| **Class 333** | 4 | 96.4 m | 167 t | Classic CAF cab — analogue speedometer, duplex BC/BP pressure gauge, MR pressure gauge, paperwork shelf, monochrome TMS screen |
+| **Class 331/0** | 3 | 72.0 m | 120 t | Modern Civity cab — flat-panel TMS / large central DMI / ETCS DMI, CCTV monitor strip above the windscreen, illuminated pushbuttons, lighter pearl-grey palette |
+
+Both share the same UK-standard safety kit (AWS sunflower, DRA mushroom, TPWS+
+unit, emergency brake plunger, GSM-R cab radio) and the same master controller
+layout, since both are CAF Civity family.
 
 ## Service
 
@@ -48,9 +63,10 @@ the platform). Halt with the cab beside the marker for a perfect stop.
 
 On mobile, on-screen pads provide power, brake, horn, AWS reset and pause.
 
-## Cab Fittings
+## Cab Fittings — Class 333
 
-The driver's cab is modelled on the real **Class 333** unit and includes:
+The Class 333 cab is modelled on the real CAF Civity Mk1 cab fitted to
+Northern's 4-car EMUs (in service since 2000), and includes:
 
 - **Speedometer** with chrome bezel and a **digital LCD speed readout** below
 - **Duplex pressure gauge** — red needle for brake-cylinder, black needle for brake-pipe
@@ -67,6 +83,35 @@ The driver's cab is modelled on the real **Class 333** unit and includes:
 - **TMS / driver display** screen on the left of the dash showing service info
 - **Paperwork shelf** above the gauges with the printed schedule card
 - **Grab handle** on the cab side, sun visors, A-pillars, headliner and side-window frames
+
+## Cab Fittings — Class 331/0
+
+The Class 331/0 cab is a complete ground-up rebuild reflecting Northern's
+newer CAF Civity DMU/EMU (in service since 2019). The dashboard is fully
+flat-panel; there are no analogue gauges. It includes:
+
+- **TMS status panel** (left flat screen) — service code, unit length, brake
+  test status, doors, pantograph, traction state
+- **Main DMI** (large central flat screen) — big digital MPH readout, live
+  speed-vs-limit bar, brake-cylinder and main-reservoir pressure bars, next
+  station and live schedule
+- **ETCS DMI** (right flat screen) — placeholder showing ERTMS level (the
+  real unit is fitted but not active on Northern's network)
+- **CCTV monitor strip** above the windscreen — four small platform-view
+  displays, mimicking the DOO CCTV fitted to Class 331 cabs
+- **AWS sunflower** with reset mushroom (UK-standard safety kit)
+- **DRA** — large illuminated red mushroom; inhibits traction when set
+- **TPWS+ panel** — yellow-trimmed unit beside the central DMI
+- **Emergency Brake Plunger** — right of the master controller
+- **GSM-R cab radio** on the left bulkhead
+- **Flat illuminated pushbuttons** for headlights / wipers / cab light
+  (replacing 333's physical toggle switches)
+- **Door release L / R** in a chrome-trimmed recessed plate
+- **Reverser key switch** (R / N / F), **sander** and **pantograph** buttons
+- **Master controller** with the same P1–P4 / OFF / B1–B5 / EB lever as the
+  333, mounted on a wider chrome plinth
+- Lighter pearl-grey palette throughout — visible chrome trim, cooler
+  headliner and rear bulkhead than the 333
 
 ## Demo Mode
 
@@ -92,7 +137,7 @@ The menu's **DEMO RUN ×2** button starts an autopilot that drives the route end
 ## Roadmap
 
 - v2: Wharfedale branch (Shipley → Ilkley) selectable from the menu
-- Additional rolling stock: Class 195, Class 331/0
+- Additional rolling stock: Class 195 (DMU)
 - Real audio recordings (CC-BY) replacing synthesised audio
 - Day / night / weather presets
 - Save best-time leaderboard (local storage)

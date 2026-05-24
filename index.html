@@ -23,6 +23,7 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 #menu .keys b{display:inline-block;border:1px solid rgba(92,200,255,0.3);padding:0.08em 0.45em;margin:0 0.18em;font-family:'Orbitron',sans-serif;font-size:0.62rem;color:#9ccfff;font-weight:600;background:rgba(92,200,255,0.05);}
 #menu button{background:linear-gradient(180deg,rgba(92,200,255,0.18),rgba(92,200,255,0.06));border:1px solid rgba(92,200,255,0.5);color:#cfe6f7;font-family:'Orbitron',sans-serif;font-size:0.85rem;padding:0.85rem 2.2rem;cursor:pointer;letter-spacing:0.3em;font-weight:700;transition:all 0.2s;width:100%;max-width:300px;display:block;margin:0 auto;}
 #menu button:hover,#menu button:active{background:linear-gradient(180deg,rgba(92,200,255,0.32),rgba(92,200,255,0.12));box-shadow:0 0 30px rgba(92,200,255,0.25);color:#fff;}
+#menu .unitBtn.selected{background:linear-gradient(180deg,rgba(92,200,255,0.42),rgba(92,200,255,0.18));border-color:#9ccfff;color:#fff;box-shadow:0 0 24px rgba(92,200,255,0.35);}
 #menu .credits{margin-top:1.4rem;font-size:0.62rem;color:rgba(180,210,235,0.35);text-align:center;line-height:1.7;letter-spacing:0.05em;}
 #menu .credits a{color:rgba(180,210,235,0.55);text-decoration:none;}
 
@@ -71,7 +72,7 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 
 <div id="menu" style="display:none;">
   <h1>AIREDALE LINE</h1>
-  <div class="sub">Class 333 — Driver Simulator</div>
+  <div class="sub" id="menuSub">Class 333 — Driver Simulator</div>
   <div class="panel">
     <h2>Service 2L42 — Leeds → Skipton</h2>
     <div class="stations" id="stationList"></div>
@@ -80,6 +81,15 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
       <b>↑</b>/<b>W</b> Lever up — power up / brake release &nbsp; <b>↓</b>/<b>S</b> Lever down — power down / brake apply<br>
       <b>SPACE</b> Emergency brake &nbsp; <b>H</b> Horn (high) &nbsp; <b>J</b> Horn (low) &nbsp; <b>Q</b> AWS / TPWS reset &nbsp; <b>E</b> DSD reset<br>
       <b>R</b> DRA set / cancel &nbsp; <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
+    </div>
+    <h2>Select Unit</h2>
+    <div id="unitSelect" style="display:flex;gap:0.6rem;justify-content:center;margin-bottom:1.1rem;flex-wrap:wrap;">
+      <button class="unitBtn" data-train="t333" style="flex:1;min-width:140px;max-width:220px;width:auto;padding:0.7rem 0.4rem;font-size:0.78rem;line-height:1.4;">
+        CLASS 333<br><span style="font-size:0.62rem;color:rgba(180,210,235,0.55);letter-spacing:0.2em;">CAF · 4-CAR · 100MPH</span>
+      </button>
+      <button class="unitBtn" data-train="t331" style="flex:1;min-width:140px;max-width:220px;width:auto;padding:0.7rem 0.4rem;font-size:0.78rem;line-height:1.4;">
+        CLASS 331/0<br><span style="font-size:0.62rem;color:rgba(180,210,235,0.55);letter-spacing:0.2em;">CAF · 3-CAR · 100MPH</span>
+      </button>
     </div>
     <label style="display:flex;align-items:center;justify-content:center;gap:0.6em;margin-bottom:0.7rem;font-size:0.78rem;letter-spacing:0.18em;color:rgba(180,210,235,0.75);cursor:pointer;text-transform:uppercase;">
       <input id="fastChk" type="checkbox" style="width:1.1em;height:1.1em;accent-color:#5cc8ff;cursor:pointer;">
@@ -146,7 +156,7 @@ const ROUTE = {
     { km:  0.00, name: 'Leeds',                code: 'LDS', plat: 250, side: 'I', elev: 50, plat_no: 13, lat: 53.7958, lon: -1.5479 },
     { km:  6.40, name: 'Kirkstall Forge',      code: 'KLF', plat: 130, side: 'L', elev: 60,              lat: 53.8249, lon: -1.6068 },
     { km: 10.60, name: 'Apperley Bridge',      code: 'APY', plat: 100, side: 'L', elev: 80,              lat: 53.8347, lon: -1.7000 },
-    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80, stopMarker: '4 CAR', lat: 53.8348, lon: -1.7706 },
+    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80, stopMarker: 'cars', lat: 53.8348, lon: -1.7706 },
     { km: 15.65, name: 'Saltaire',             code: 'SAE', plat: 110, side: 'L', elev: 80,              lat: 53.8388, lon: -1.7918 },
     { km: 19.50, name: 'Bingley',              code: 'BIY', plat: 130, side: 'L', elev: 90,              lat: 53.8480, lon: -1.8378 },
     { km: 20.85, name: 'Crossflatts',          code: 'CFL', plat:  95, side: 'L', elev: 95,              lat: 53.8505, lon: -1.8519 },
@@ -220,22 +230,75 @@ const ROUTE = {
 };
 
 // ============================================================
-// CLASS 333 specs
+// ROLLING-STOCK SPECS — TRAINS map (each entry is a fully self-contained
+// unit description). Default selected unit is Class 333; a different
+// entry is swapped in by the menu's model selector, and GS.train then
+// drives physics, branding, audio tuning and cab geometry.
 // ============================================================
-const T333 = {
-  name: 'Class 333',
-  builder: 'CAF',
-  cars: 4,
-  lengthM: 96.4,
-  massT: 167,                        // tonnes empty + light load
-  maxMph: 100,
-  maxAccel: 0.85,                    // m/s² nominal
-  maxBrake: 1.10,                    // m/s² service
-  emergBrake: 1.40,                  // m/s² emergency
-  powerNotches: 5,                   // 0 (OFF) + 4 (P1..P4)
-  brakeNotches: 6,                   // 0 (OFF) + 5 (B1..B5) + EB at -6
-  davisA: 1.20,  davisB: 0.012,  davisC: 0.00018,  // simplified rolling/aero
+const TRAINS = {
+  t333: {
+    key: 't333',
+    name: 'Class 333',
+    builder: 'CAF',
+    cars: 4,
+    lengthM: 96.4,
+    massT: 167,                        // tonnes empty + light load
+    maxMph: 100,
+    maxAccel: 0.85,                    // m/s² nominal
+    maxBrake: 1.10,                    // m/s² service
+    emergBrake: 1.40,                  // m/s² emergency
+    powerNotches: 5,                   // 0 (OFF) + 4 (P1..P4)
+    brakeNotches: 6,                   // 0 (OFF) + 5 (B1..B5) + EB at -6
+    davisA: 1.20,  davisB: 0.012,  davisC: 0.00018,  // simplified rolling/aero
+    cabBuilder: 'buildCab333',         // dispatcher target
+    tmsLabel: 'CLASS 333  TMS',
+    speedoUnits: 'CLASS 333',
+    // Audio: inverter whine is a Class 333 trait. Two close-tuned oscillators
+    // (saw + square) into a 900 Hz LPF gives the older IGBT-drive growl.
+    audio: {
+      tractionOsc1Type: 'sawtooth', tractionOsc1BaseHz: 60,
+      tractionOsc2Type: 'square',   tractionOsc2BaseHz: 90,
+      tractionFilterCutoff: 900,
+      tractionPitchPerMs: 4.5,          // Hz added to osc1 per m/s of speed
+      tractionOsc2Ratio: 1.5,
+      tractionFilterPerMs: 25,          // Hz added to LPF per m/s
+      tractionFilterBase: 400,
+      tractionGainScale: 0.18,
+    },
+  },
+  t331: {
+    key: 't331',
+    name: 'Class 331/0',
+    builder: 'CAF',
+    cars: 3,
+    lengthM: 72.0,
+    massT: 120,
+    maxMph: 100,
+    maxAccel: 0.95,                    // slightly punchier than 333 (newer drive, lighter unit)
+    maxBrake: 1.15,
+    emergBrake: 1.40,
+    powerNotches: 5,
+    brakeNotches: 6,
+    davisA: 0.95,  davisB: 0.010,  davisC: 0.00016,
+    cabBuilder: 'buildCab331',
+    tmsLabel: 'CLASS 331/0  DMI',
+    speedoUnits: 'CLASS 331/0',
+    // Audio: newer Bombardier drive — cleaner, slightly higher whine, less low-end growl.
+    audio: {
+      tractionOsc1Type: 'sawtooth', tractionOsc1BaseHz: 95,
+      tractionOsc2Type: 'sine',     tractionOsc2BaseHz: 142,
+      tractionFilterCutoff: 1400,
+      tractionPitchPerMs: 6.5,
+      tractionOsc2Ratio: 1.5,
+      tractionFilterPerMs: 35,
+      tractionFilterBase: 600,
+      tractionGainScale: 0.14,
+    },
+  },
 };
+// Active unit — physics, audio and cab read from GS.train; defaults to 333.
+// Kept as a let-rebinding hook so the menu can swap units before beginService.
+const T333 = TRAINS.t333;   // back-compat alias for any debug consumers
 
 // ============================================================
 // MATH / UNITS
@@ -1135,7 +1198,10 @@ function buildStations(){
       });
 
       // ---- Stop-car marker (only where defined). The cab should align with it
-      // so game scoring (which expects GS.km ≈ s.km) rewards a visual match. ----
+      // so game scoring (which expects GS.km ≈ s.km) rewards a visual match.
+      // For 'cars'-type markers the number reflects the active unit's car count
+      // and is repainted when the user picks a different unit (see
+      // repaintStopMarkers() below). ----
       if (s.stopMarker){
         const fM = trackFrame(s.km);
         const yaw = Math.atan2(-fM.t.x, -fM.t.z);
@@ -1147,18 +1213,28 @@ function buildStations(){
         pole.position.set(0, platformH + 0.95, 0);
         mg.add(pole);
         const c = document.createElement('canvas'); c.width = 256; c.height = 320;
-        const cx = c.getContext('2d');
-        cx.fillStyle = '#ffe000'; cx.fillRect(0,0,256,320);
-        cx.strokeStyle = '#0a0a0a'; cx.lineWidth = 12; cx.strokeRect(8,8,240,304);
-        cx.fillStyle = '#0a0a0a';
-        cx.font = 'bold 150px Orbitron, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
-        const parts = s.stopMarker.split(' ');
-        cx.fillText(parts[0], 128, 110);
-        if (parts[1]){
-          cx.font = 'bold 80px Orbitron, sans-serif';
-          cx.fillText(parts[1], 128, 232);
+        function paintMarkerCanvas(text){
+          const cx = c.getContext('2d');
+          cx.fillStyle = '#ffe000'; cx.fillRect(0,0,256,320);
+          cx.strokeStyle = '#0a0a0a'; cx.lineWidth = 12; cx.strokeRect(8,8,240,304);
+          cx.fillStyle = '#0a0a0a';
+          cx.font = 'bold 150px Orbitron, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+          const parts = text.split(' ');
+          cx.fillText(parts[0], 128, 110);
+          if (parts[1]){
+            cx.font = 'bold 80px Orbitron, sans-serif';
+            cx.fillText(parts[1], 128, 232);
+          }
         }
+        // 'cars' marker: dynamic — reflects active unit's car count. At module-
+        // load time GS is not yet declared (it sits further down the file), so
+        // the initial paint uses the default-unit car count from TRAINS; once
+        // the player selects a unit, repaintStopMarkers() updates the texture.
+        const initialText = (s.stopMarker === 'cars') ? (TRAINS.t333.cars + ' CAR') : s.stopMarker;
+        paintMarkerCanvas(initialText);
         const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+        // Stash refs on the station so repaintStopMarkers() can update later.
+        s._markerCanvas = c; s._markerTex = tex; s._markerPaint = paintMarkerCanvas;
         const plateMat = new THREE.MeshStandardMaterial({
           map: tex, emissive: 0x808080, emissiveMap: tex, emissiveIntensity: 0.45,
           side: THREE.DoubleSide, roughness: 0.45,
@@ -1545,12 +1621,19 @@ function buildLandmarks(){
 scene.add(buildLandmarks());
 
 // ============================================================
-// CAB — Class 333 driver's cab geometry, anchored to camera rig
-// We build the cab as foreground geometry parented to the train's frame so
-// the windscreen always frames the forward view.
+// CAB — driver's cab geometry, anchored to camera rig
+// Two complete cabs are implemented (Class 333 — analogue gauges + cream
+// dials; Class 331/0 — modern flat-panel DMIs and CCTV strip). A dispatcher
+// `buildCab(spec)` picks the right builder based on the active train spec.
+// The window-cab is foreground geometry parented to the camera rig so the
+// windscreen always frames the forward view.
 // ============================================================
 const cabGroup = new THREE.Group();
 scene.add(cabGroup);
+// Active cab handle (rebuilt by beginService when the unit changes). Initialised
+// to null and populated by buildAndAttachCab() once the helpers below are defined.
+let cab = null;
+let _builtCabKey = null;    // GS.train.key of currently-mounted cab; lets us skip rebuild if unchanged
 
 // Helper — paint a realistic round gauge face into a canvas texture.
 // opts: { label, units, max, majorEvery, minorEvery, redFrom, yellowFrom, sweepFrom, sweepTo }
@@ -1696,7 +1779,7 @@ function makeGauge({ label, units, max, majorEvery, minorEvery, redFrom, yellowF
   return { group: grp, needle, needle2 };
 }
 
-const cab = (function buildCab(){
+function buildCab333(spec){
   const g = new THREE.Group();
 
   // ==== Cab dashboard built with -Z = forward (driver looks out windscreen) ====
@@ -1874,7 +1957,7 @@ const cab = (function buildCab(){
 
   // Speedometer (left) — slightly larger, dominant instrument as on the real cab
   const speedo = makeGauge({
-    label: 'MPH', units: 'CLASS 333', max: 100, majorEvery: 10, minorEvery: 5,
+    label: 'MPH', units: spec.speedoUnits, max: 100, majorEvery: 10, minorEvery: 5,
     yellowFrom: 75, redFrom: 100, radius: 0.20, subLabel: 'SPEED'
   });
   speedo.group.position.set(-0.62, clusterY, clusterZ);
@@ -2118,7 +2201,7 @@ const cab = (function buildCab(){
     ctx.fillStyle = '#03110b'; ctx.fillRect(0,0,768,320);
     ctx.strokeStyle = '#103018'; for (let y = 0; y < 320; y += 4){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(768,y); ctx.stroke(); }
     ctx.font = 'bold 28px Roboto Mono, monospace'; ctx.fillStyle = '#7cf08a'; ctx.textAlign='left';
-    ctx.fillText('CLASS 333  TMS', 32, 50);
+    ctx.fillText(spec.tmsLabel, 32, 50);
     ctx.font = '20px Roboto Mono'; ctx.fillStyle = '#5acd6e';
     ctx.fillText('SERVICE  2L42  LDS → SKI', 32, 96);
     ctx.fillText('NEXT     ----', 32, 134);
@@ -2721,9 +2804,1006 @@ const cab = (function buildCab(){
     tpwsBtnOverride, tpwsBtnBrakeDem, tpwsBtnIsolation,
     doorBtnL, doorBtnR,
     speedDigitsCanvas, speedDigitsCtx, speedDigitsTex, drawSpeedDigits,
+    // DMI canvas is 333-cab-specific (no central DMI); leave undefined for parity with 331.
+    drawDmi: null, dmiTex: null,
   };
-})();
-cabGroup.add(cab.group);
+}
+
+// ============================================================
+// CAB — Class 331/0 (CAF Civity, Northern). Fully rebuilt dashboard:
+// three flat-panel displays (TMS / main DMI / ETCS), a CCTV monitor strip
+// above the windscreen, lighter pearl-grey palette and chrome trim. Most
+// safety controls (AWS sunflower, DRA mushroom, TPWS+ unit, EBP, GSM-R)
+// are universal UK kit and visually echo the 333, but in updated positions
+// and on flat-panel mountings rather than moulded dashboard inserts.
+// Returns the same shape as buildCab333 so updateCabAnim doesn't need to
+// branch — analogue-only references (speedoNeedle, mrNeedle, pressNeedle)
+// are returned as null and guarded at the call site.
+// ============================================================
+function buildCab331(spec){
+  const g = new THREE.Group();
+
+  // ==== Materials — cooler, lighter palette than the 333 ====
+  // Pearl-grey dash, brushed-aluminium trim, near-white headliner. The
+  // overall feel is "modern Civity" — fewer mouldings, more flat surfaces
+  // and visible chrome edges.
+  const dashMat   = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.62, metalness: 0.10 });
+  const panelMat  = new THREE.MeshStandardMaterial({ color: 0x484c52, roughness: 0.60, metalness: 0.12 });
+  const trimMat   = new THREE.MeshStandardMaterial({ color: 0xb0b6be, metalness: 0.85, roughness: 0.30 });
+  const frameMat  = new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.45, metalness: 0.30 });
+  const seatMat   = new THREE.MeshStandardMaterial({ color: 0x1d2632, roughness: 0.85, metalness: 0.05 });
+  const floorMat  = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.95 });
+  const wallMat   = new THREE.MeshStandardMaterial({ color: 0x36393d, roughness: 0.82, metalness: 0.06 });
+  const wallInnerMat = new THREE.MeshStandardMaterial({ color: 0x484c52, roughness: 0.82, metalness: 0.06 });
+
+  // Dashboard top — fine matte sheen with subtle grid lines (less speckle than
+  // 333's moulded plastic). Procedural canvas keeps with the no-assets policy.
+  const dashTopTex = (() => {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 320;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,0,320);
+    grad.addColorStop(0,'#454a51'); grad.addColorStop(1,'#33373c');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,1024,320);
+    // Faint horizontal grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1;
+    for (let y = 0; y < 320; y += 16){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(1024,y); ctx.stroke(); }
+    // Subtle long inset bar near the top for chrome trim seam
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(0, 18, 1024, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(0, 22, 1024, 1);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const dashTopMat = new THREE.MeshStandardMaterial({ map: dashTopTex, roughness: 0.55, metalness: 0.12 });
+
+  // Main dashboard slab — slightly less aggressive tilt than 333 (0.08 rad).
+  // The slab is the mounting surface for the three flat panels above.
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.42, 1.05), dashMat);
+  dash.position.set(0, 1.05, -1.18);
+  dash.rotation.x = 0.08;
+  g.add(dash);
+  // Lower dash return
+  const dash2 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.95, 0.30), dashMat);
+  dash2.position.set(0, 0.55, -1.55);
+  g.add(dash2);
+  // Chrome bumper at the dashboard's lower edge — wider than 333's knee-roll
+  // for a sleeker modern look.
+  const kneeRoll = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.4, 24), trimMat);
+  kneeRoll.rotation.z = PI/2;
+  kneeRoll.position.set(0, 0.83, -1.40);
+  g.add(kneeRoll);
+
+  // ==== Floor (same studded rubber matting as 333) ====
+  const floorTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,256,256);
+    for (let y = 8; y < 256; y += 20){
+      for (let x = (y/20 % 2 === 0 ? 8 : 18); x < 256; x += 20){
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, PI*2);
+        ctx.fillStyle = '#23272b'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x-1, y-1, 5, 0, PI*2);
+        ctx.fillStyle = '#2c3034'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 1.5, 0, PI*2);
+        ctx.fillStyle = '#0d0e10'; ctx.fill();
+      }
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 6);
+    t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 2.6),
+    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 })
+  );
+  floor.position.set(0, 0.0, -0.30); g.add(floor);
+
+  // ==== Driver / secondman seats — same form factor as 333 (UK EMU standard) ====
+  const seatX = -0.7;
+  const seatPedestal = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.10, 0.18, 0.45, 16),
+    new THREE.MeshStandardMaterial({ color: 0x14161a, metalness: 0.5, roughness: 0.5 })
+  );
+  seatPedestal.position.set(seatX, 0.225, 0.40); g.add(seatPedestal);
+  const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.55), seatMat);
+  seatBase.position.set(seatX, 0.55, 0.40); g.add(seatBase);
+  const seatBolL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.50), seatMat);
+  seatBolL.position.set(seatX - 0.275, 0.58, 0.40); g.add(seatBolL);
+  const seatBolR = seatBolL.clone(); seatBolR.position.set(seatX + 0.275, 0.58, 0.40); g.add(seatBolR);
+  const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.10), seatMat);
+  seatBack.position.set(seatX, 1.05, 0.65); g.add(seatBack);
+  const seatHead = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.20, 0.10), seatMat);
+  seatHead.position.set(seatX, 1.55, 0.65); g.add(seatHead);
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x182230, roughness: 0.8 });
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.40), armMat);
+  armL.position.set(seatX - 0.30, 0.78, 0.40); g.add(armL);
+  const armR = armL.clone(); armR.position.set(seatX + 0.30, 0.78, 0.40); g.add(armR);
+  const jumpBase = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.08, 0.30), seatMat);
+  jumpBase.position.set(1.30, 0.50, 0.40); g.add(jumpBase);
+  const jumpBack = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.55, 0.06), seatMat);
+  jumpBack.position.set(1.30, 0.80, 0.55); g.add(jumpBack);
+
+  // ==== A-pillars / roof / headliner — same envelope as 333 ====
+  const pillarL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.4, 0.18), frameMat);
+  pillarL.position.set(-1.55, 1.5, -0.55); g.add(pillarL);
+  const pillarR = pillarL.clone(); pillarR.position.set(1.55, 1.5, -0.55); g.add(pillarR);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.18, 2.7), frameMat);
+  roof.position.set(0, 2.55, -0.35); g.add(roof);
+  // Headliner — paler / cooler than 333
+  const headliner = new THREE.Mesh(
+    new THREE.BoxGeometry(3.2, 0.05, 2.6),
+    new THREE.MeshStandardMaterial({ color: 0xe8e6e0, roughness: 0.9 })
+  );
+  headliner.position.set(0, 2.45, -0.35); g.add(headliner);
+  // Centre pillar between windscreens
+  const cpillar = new THREE.Mesh(new THREE.BoxGeometry(0.10, 2.0, 0.10), frameMat);
+  cpillar.position.set(0, 1.55, -0.45); g.add(cpillar);
+  // Sun visors
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0x383838, roughness: 0.9 });
+  const visorL = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.04, 0.20), visorMat);
+  visorL.position.set(-0.7, 2.36, -0.55); g.add(visorL);
+  const visorR = visorL.clone(); visorR.position.set(0.7, 2.36, -0.55); g.add(visorR);
+
+  // ==== Wipers ====
+  const wiperMat = new THREE.MeshStandardMaterial({ color: 0x101010, metalness: 0.6, roughness: 0.4 });
+  const wL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.018, 0.018), wiperMat);
+  wL.geometry.translate(-0.275, 0, 0); wL.position.set(-0.18, 1.42, -0.50); g.add(wL);
+  const wR = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.018, 0.018), wiperMat);
+  wR.geometry.translate(0.275, 0, 0); wR.position.set(0.18, 1.42, -0.50); g.add(wR);
+
+  // ==== CCTV monitor strip — four small displays mounted above the windscreen ====
+  // Real Class 331 cabs have a row of LCDs (DOO CCTV) showing platform views
+  // when stopped at a station. We render four procedural-camera-view textures;
+  // they're decorative (no live update) but visually anchor this as a modern unit.
+  function cctvTex(label){
+    const c = document.createElement('canvas'); c.width = 256; c.height = 144;
+    const ctx = c.getContext('2d');
+    // Greyish night-vision-ish base
+    ctx.fillStyle = '#0a1014'; ctx.fillRect(0,0,256,144);
+    // Faint platform-edge gradient
+    const grad = ctx.createLinearGradient(0, 90, 0, 144);
+    grad.addColorStop(0, 'rgba(80,90,100,0.0)'); grad.addColorStop(1, 'rgba(140,150,160,0.35)');
+    ctx.fillStyle = grad; ctx.fillRect(0, 90, 256, 54);
+    // Suggestion of platform edge stripe (yellow)
+    ctx.fillStyle = '#665520'; ctx.fillRect(0, 110, 256, 6);
+    // Scanlines
+    ctx.strokeStyle = 'rgba(255,255,255,0.025)'; ctx.lineWidth = 1;
+    for (let y = 0; y < 144; y += 3){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(256,y); ctx.stroke(); }
+    // Overlay text
+    ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 16px Roboto Mono, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(label, 8, 6);
+    ctx.font = '12px Roboto Mono'; ctx.fillStyle = '#7090a8';
+    ctx.fillText('STANDBY', 8, 124);
+    // "REC" dot
+    ctx.fillStyle = '#ff3030'; ctx.beginPath(); ctx.arc(240, 14, 5, 0, PI*2); ctx.fill();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  const cctvLabels = ['CAM 1  FRONT L', 'CAM 2  REAR L', 'CAM 3  REAR R', 'CAM 4  FRONT R'];
+  const cctvBezel = new THREE.Mesh(
+    new THREE.BoxGeometry(1.50, 0.22, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.6, metalness: 0.3 })
+  );
+  cctvBezel.position.set(0, 2.18, -1.06);
+  cctvBezel.rotation.x = 0.18;     // angled slightly down toward driver
+  g.add(cctvBezel);
+  for (let i = 0; i < 4; i++){
+    const tex = cctvTex(cctvLabels[i]);
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.32, 0.18),
+      new THREE.MeshStandardMaterial({
+        map: tex, emissive: 0x152025, emissiveMap: tex, emissiveIntensity: 0.5, roughness: 0.65
+      })
+    );
+    m.position.set(-0.555 + i * 0.37, 2.18, -1.04);
+    // Tilt the screen face down toward the driver (matches the bezel's rotation.x).
+    m.rotation.set(0.18, 0, 0);
+    g.add(m);
+  }
+  // Chrome trim around the CCTV strip
+  const cctvTrim = new THREE.Mesh(
+    new THREE.BoxGeometry(1.52, 0.24, 0.012),
+    trimMat
+  );
+  cctvTrim.position.set(0, 2.18, -1.08);
+  cctvTrim.rotation.x = 0.18;
+  g.add(cctvTrim);
+
+  // ==== Three flat-panel screens on the dashboard top ====
+  // We anchor them to clusterY/clusterZ with a tilt that matches the 333's
+  // dashboard angle so they share visual lighting / shadow with the cab.
+  const screenTilt = 0.18;          // forward face tilts UP toward driver
+  const clusterY = 1.20;
+  const clusterZ = -1.05;
+  const tiltX = -PI/2 + 0.08;        // for items lying flat on the dash slab
+
+  function flatScreen(w, h, x, y, z, drawFn){
+    // Bezel
+    const bezel = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.04, h + 0.04, 0.025),
+      new THREE.MeshStandardMaterial({ color: 0x0d0e10, roughness: 0.55, metalness: 0.4 })
+    );
+    bezel.position.set(x, y, z);
+    bezel.rotation.x = -screenTilt;
+    g.add(bezel);
+    // Chrome trim band around bezel
+    const trim = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.06, h + 0.06, 0.005),
+      trimMat
+    );
+    trim.position.set(x, y, z - 0.002);
+    trim.rotation.x = -screenTilt;
+    g.add(trim);
+    // Canvas + texture
+    const c = document.createElement('canvas');
+    // High-res for the central DMI, lower for sides — kept square-ish ratio
+    c.width = Math.round(w * 1200); c.height = Math.round(h * 1200);
+    const ctx = c.getContext('2d');
+    drawFn(ctx, c.width, c.height);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const screen = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshStandardMaterial({
+        map: tex, emissive: 0x102018, emissiveMap: tex, emissiveIntensity: 0.7, roughness: 0.55
+      })
+    );
+    screen.position.set(x, y + 0.001, z + 0.014);
+    screen.rotation.x = -screenTilt;
+    g.add(screen);
+    return { canvas: c, ctx, tex };
+  }
+
+  // --- LEFT: TMS status panel (service info, faults, doors) ---
+  function paintTms(ctx, W, H){
+    ctx.fillStyle = '#03110b'; ctx.fillRect(0,0,W,H);
+    for (let y = 0; y < H; y += 4){ ctx.strokeStyle = '#103018'; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    ctx.font = 'bold 28px Roboto Mono, monospace'; ctx.fillStyle = '#7cf08a'; ctx.textAlign='left';
+    ctx.fillText(spec.tmsLabel, 24, 44);
+    ctx.font = '20px Roboto Mono'; ctx.fillStyle = '#5acd6e';
+    ctx.fillText('SERVICE  2L42  LDS → SKI', 24, 84);
+    ctx.fillText('UNIT     ' + spec.cars + '-CAR  ' + spec.lengthM.toFixed(0) + 'M', 24, 116);
+    ctx.fillText('BRAKE TEST     OK', 24, 154);
+    ctx.fillText('DOORS          CLOSED', 24, 184);
+    ctx.fillText('PANTOGRAPH     UP',     24, 214);
+    ctx.fillText('TRACTION       READY',  24, 244);
+    ctx.font = '16px Roboto Mono'; ctx.fillStyle = '#3aa050';
+    ctx.fillText('[F1] FAULTS  [F2] CCTV  [F3] HEADCODE', 24, H - 18);
+  }
+  const tms = flatScreen(0.50, 0.32, -1.05, clusterY + 0.05, clusterZ + 0.20, paintTms);
+
+  // --- CENTRE: DMI (large) — the live display we repaint every frame ---
+  // drawDmi(state) repaints the canvas with the current speed, limit,
+  // brake/MR pressure bars, schedule info. It is wired to the existing
+  // updateCabAnim hook so adding a new hook isn't needed.
+  let dmiObj;
+  function paintDmiInitial(ctx, W, H){
+    ctx.fillStyle = '#070d12'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = '#5cc8ff'; ctx.font = 'bold 28px Orbitron, sans-serif';
+    ctx.textAlign='left'; ctx.fillText('CLASS 331/0  DMI', 24, 44);
+  }
+  dmiObj = flatScreen(0.85, 0.42, 0.00, clusterY + 0.05, clusterZ + 0.22, paintDmiInitial);
+  function drawDmi(mph){
+    const ctx = dmiObj.ctx, W = dmiObj.canvas.width, H = dmiObj.canvas.height;
+    // Black DMI background — softer dark blue tint than the TMS
+    ctx.fillStyle = '#060a10'; ctx.fillRect(0, 0, W, H);
+    // Top status strip — title + clock + service code
+    ctx.fillStyle = '#0d1a26'; ctx.fillRect(0, 0, W, 56);
+    ctx.fillStyle = '#5cc8ff'; ctx.font = 'bold 26px Orbitron, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('CLASS 331/0  DMI', 18, 28);
+    ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 22px Roboto Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('2L42  LDS → SKI', W - 18, 28);
+
+    // Big speed digits in the centre-left
+    const spd = Math.round(mph);
+    ctx.fillStyle = '#0a1410'; ctx.fillRect(28, 78, 360, 220);
+    ctx.strokeStyle = '#1a2820'; ctx.lineWidth = 2; ctx.strokeRect(28, 78, 360, 220);
+    ctx.fillStyle = '#9cff9c';
+    ctx.shadowColor = '#7cff7c'; ctx.shadowBlur = 18;
+    ctx.font = 'bold 180px "Roboto Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(spd).padStart(3, ' '), 28 + 180, 78 + 110);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#5acd6e'; ctx.font = 'bold 22px Orbitron, sans-serif';
+    ctx.fillText('MPH', 28 + 180, 78 + 210);
+
+    // Speed-vs-limit bar — sits under the big digits
+    const limitMph = (typeof speedLimitAt === 'function') ? speedLimitAt(GS.km) : 75;
+    const barX = 28, barY = 318, barW = 360, barH = 26;
+    ctx.fillStyle = '#0d1416'; ctx.fillRect(barX, barY, barW, barH);
+    const frac = clamp(spd / 100, 0, 1);
+    const barColor = (spd > limitMph + 0.5) ? '#ff4040' :
+                     (spd > limitMph - 3.0) ? '#ffd23a' : '#5acd6e';
+    ctx.fillStyle = barColor; ctx.fillRect(barX + 2, barY + 2, (barW - 4) * frac, barH - 4);
+    // Limit tick — vertical white line at the limit position
+    const lx = barX + (barW * (limitMph / 100));
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(lx, barY - 6); ctx.lineTo(lx, barY + barH + 6); ctx.stroke();
+    ctx.fillStyle = '#cfe6f7'; ctx.font = '16px Roboto Mono, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('LIMIT ' + limitMph + ' MPH', barX, barY + barH + 8);
+
+    // Right-side panels — brake-cylinder pressure (bar), main reservoir (bar),
+    // and schedule/next-station readout below.
+    const rx = 420, rW = W - rx - 24;
+    // BC pressure (rises with brake demand)
+    const bc = clamp((GS.notch < 0 ? -GS.notch : 0), 0, 5);
+    ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 18px Roboto Mono, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('BC PRESS', rx, 92);
+    const bcBarY = 102, bcBarH = 22;
+    ctx.fillStyle = '#0d1416'; ctx.fillRect(rx, bcBarY, rW, bcBarH);
+    ctx.fillStyle = (bc >= 4) ? '#ffae66' : '#9ccfff';
+    ctx.fillRect(rx + 2, bcBarY + 2, (rW - 4) * (bc / 5), bcBarH - 4);
+    ctx.fillStyle = '#cfe6f7'; ctx.font = '15px Roboto Mono';
+    ctx.fillText(bc.toFixed(1) + ' BAR', rx, bcBarY + bcBarH + 14);
+
+    // MR pressure (steady around 8.8 bar)
+    const mr = 8.8 + sin(GS.serviceTime * 0.6) * 0.15;
+    ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 18px Roboto Mono';
+    ctx.fillText('MR PRESS', rx, 162);
+    const mrBarY = 172, mrBarH = 22;
+    ctx.fillStyle = '#0d1416'; ctx.fillRect(rx, mrBarY, rW, mrBarH);
+    ctx.fillStyle = (mr < 6.5) ? '#ffae66' : '#9cff9c';
+    ctx.fillRect(rx + 2, mrBarY + 2, (rW - 4) * clamp(mr / 12, 0, 1), mrBarH - 4);
+    ctx.fillStyle = '#cfe6f7'; ctx.font = '15px Roboto Mono';
+    ctx.fillText(mr.toFixed(1) + ' BAR', rx, mrBarY + mrBarH + 14);
+
+    // Next-station readout
+    const ns = ROUTE.stations[GS.nextStationIdx];
+    ctx.fillStyle = '#5cc8ff'; ctx.font = 'bold 20px Orbitron, sans-serif';
+    ctx.fillText('NEXT', rx, 248);
+    ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 28px Roboto Mono, monospace';
+    ctx.fillText(ns ? (ns.code + '  ' + ns.name) : '----', rx, 282);
+    ctx.fillStyle = '#7090a8'; ctx.font = '16px Roboto Mono';
+    ctx.fillText(ns ? (ns.km.toFixed(2) + ' km · plat ' + ns.plat + 'm') : '', rx, 312);
+
+    // Bottom service strip
+    ctx.fillStyle = '#0d1a26'; ctx.fillRect(0, H - 36, W, 36);
+    ctx.fillStyle = '#5cc8ff'; ctx.font = '16px Orbitron, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('AWS  DRA  TPWS  HEAD  DOORS  GSM-R', 18, H - 18);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#9cff9c';
+    ctx.fillText('READY', W - 18, H - 18);
+  }
+
+  // --- RIGHT: ETCS DMI placeholder ---
+  function paintEtcs(ctx, W, H){
+    ctx.fillStyle = '#040608'; ctx.fillRect(0,0,W,H);
+    // ETCS DMI mimics the standard ERTMS layout in muted tones — circular speed
+    // dial outline + status zone. Static; the real one isn't active on Northern
+    // Class 331s yet.
+    ctx.strokeStyle = '#2a3540'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(W * 0.45, H * 0.55, Math.min(W, H) * 0.36, 0, PI*2); ctx.stroke();
+    ctx.fillStyle = '#7090a8'; ctx.font = 'bold 22px Orbitron, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('ETCS', W * 0.45, H * 0.55);
+    ctx.font = '14px Roboto Mono'; ctx.fillStyle = '#506070';
+    ctx.fillText('NOT FITTED', W * 0.45, H * 0.55 + 26);
+    // Status zone (top)
+    ctx.fillStyle = '#0d1a26'; ctx.fillRect(0, 0, W, 36);
+    ctx.fillStyle = '#5cc8ff'; ctx.font = 'bold 16px Orbitron, sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('ETCS DMI', 14, 18);
+    ctx.textAlign='right'; ctx.fillStyle = '#7090a8';
+    ctx.fillText('LEVEL 0', W - 14, 18);
+  }
+  const etcs = flatScreen(0.45, 0.30, 1.05, clusterY + 0.05, clusterZ + 0.20, paintEtcs);
+
+  // ==== Dashboard apron — safety controls below the screens, on the dash slab top ====
+  // Y position sits just on top of the dashboard surface; tiltX makes them lie
+  // flat on the slab the same way 333's controls do.
+  const apronY = clusterY - 0.20;
+
+  // AWS sunflower indicator + reset mushroom
+  const awsTexN = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createRadialGradient(128,128, 100, 128, 128, 128);
+    grad.addColorStop(0,'#3a3a3c'); grad.addColorStop(1,'#1a1a1a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(128,128, 100, 0, PI*2); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  })();
+  const awsTexW = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createRadialGradient(128,128, 100, 128, 128, 128);
+    grad.addColorStop(0,'#3a3a3c'); grad.addColorStop(1,'#1a1a1a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+    for (let i=0;i<8;i++){
+      ctx.fillStyle = (i%2===0) ? '#ffd400' : '#000';
+      ctx.beginPath(); ctx.moveTo(128,128);
+      ctx.arc(128,128, 100, i*PI/4, (i+1)*PI/4); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(128,128, 28, 0, PI*2); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  })();
+  const awsMat = new THREE.MeshStandardMaterial({ map: awsTexN, roughness: 0.5 });
+  const aws = new THREE.Mesh(new THREE.CircleGeometry(0.07, 32), awsMat);
+  aws.rotation.x = tiltX;
+  aws.position.set(-0.95, apronY + 0.005, clusterZ + 0.04);
+  g.add(aws);
+  const awsResetBtn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.026, 0.025, 16),
+    new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.55, metalness: 0.25 })
+  );
+  awsResetBtn.position.set(-0.83, apronY + 0.012, clusterZ + 0.04);
+  awsResetBtn.rotation.x = 0.08;
+  g.add(awsResetBtn);
+
+  // DRA — Driver's Reminder Appliance (large red illuminated mushroom)
+  const draBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.050, 0.02, 24),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.5, metalness: 0.35 })
+  );
+  draBase.position.set(-0.62, apronY + 0.01, clusterZ + 0.04);
+  draBase.rotation.x = 0.08;
+  g.add(draBase);
+  const draMat = new THREE.MeshStandardMaterial({
+    color: 0xff2020, emissive: 0x440000, emissiveIntensity: 0.4, roughness: 0.45, metalness: 0.1
+  });
+  const draCap = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 0.030, 24), draMat);
+  draCap.position.set(-0.62, apronY + 0.035, clusterZ + 0.04);
+  draCap.rotation.x = 0.08;
+  g.add(draCap);
+  const draLabelTex = (() => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 32;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,128,32);
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 2; ctx.strokeRect(1,1,126,30);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 18px Orbitron, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('DRA', 64, 16);
+    return new THREE.CanvasTexture(c);
+  })();
+  const draPlate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.10, 0.025),
+    new THREE.MeshBasicMaterial({ map: draLabelTex })
+  );
+  draPlate.position.set(-0.62, apronY + 0.005, clusterZ - 0.04);
+  draPlate.rotation.x = -PI/2 + 0.08;
+  g.add(draPlate);
+
+  // TPWS+ panel — same yellow-bordered safety unit but mounted on a chrome plate
+  // beside the DRA, slightly to the right of dashboard centre.
+  const tpwsTex = (() => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#f4c41a'; ctx.fillRect(0,0,512,256);
+    ctx.fillStyle = '#0d0e10'; ctx.fillRect(20,20,472,216);
+    ctx.fillStyle = '#f4c41a'; ctx.fillRect(20,20,472,40);
+    ctx.fillStyle = '#0d0e10'; ctx.font = 'bold 22px Orbitron, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('T P W S +', 256, 40);
+    ctx.fillStyle = '#f4c41a'; ctx.font = 'bold 13px Roboto Mono, monospace';
+    ctx.fillText('TRAIN STOP', 100, 196);
+    ctx.fillText('OVERRIDE',  100, 214);
+    ctx.fillText('BRAKE',     256, 196);
+    ctx.fillText('DEMAND',    256, 214);
+    ctx.fillText('TEMPORARY', 412, 196);
+    ctx.fillText('ISOLATION', 412, 214);
+    return new THREE.CanvasTexture(c);
+  })();
+  const tpwsBezel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.30, 0.16, 0.02),
+    new THREE.MeshStandardMaterial({ map: tpwsTex, roughness: 0.65 })
+  );
+  tpwsBezel.position.set(0.25, apronY + 0.005, clusterZ + 0.04);
+  tpwsBezel.rotation.x = -PI/2 + 0.08;
+  g.add(tpwsBezel);
+  function tpwsBtn(x, color){
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.020, 0.015, 18),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.15, roughness: 0.4 })
+    );
+    cap.position.set(x, apronY + 0.020, clusterZ + 0.05);
+    cap.rotation.x = 0.08;
+    g.add(cap);
+    return cap;
+  }
+  const tpwsBtnOverride  = tpwsBtn(0.165, 0xf0c020);
+  const tpwsBtnBrakeDem  = tpwsBtn(0.250, 0x551515);
+  const tpwsBtnIsolation = tpwsBtn(0.335, 0xf0c020);
+
+  // ==== Status indicator strip — clean horizontal row of labelled LEDs ====
+  // Sits along the upper edge of the dash slab, between the screens.
+  function indicator(label, x, defaultColor){
+    const grp = new THREE.Group();
+    grp.position.set(x, clusterY + 0.005, clusterZ - 0.18);
+    grp.rotation.x = tiltX;
+    const lblCanvas = document.createElement('canvas');
+    lblCanvas.width = 256; lblCanvas.height = 64;
+    const ctx = lblCanvas.getContext('2d');
+    ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,256,64);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 28px Orbitron, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, 128, 32);
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 3; ctx.strokeRect(2,2,252,60);
+    const lblTex = new THREE.CanvasTexture(lblCanvas);
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.04), new THREE.MeshBasicMaterial({ map: lblTex }));
+    plate.position.set(0, 0, 0.03);
+    grp.add(plate);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.013, 0.018, 24),
+      new THREE.MeshStandardMaterial({ color: 0x202225, metalness: 0.7, roughness: 0.4 })
+    );
+    ring.position.set(0, 0.001, 0);
+    grp.add(ring);
+    const dot = new THREE.Mesh(
+      new THREE.CircleGeometry(0.013, 24),
+      new THREE.MeshBasicMaterial({ color: 0x222222 })
+    );
+    dot.userData.onColor = defaultColor;
+    dot.position.set(0, 0.002, 0);
+    grp.add(dot);
+    g.add(grp);
+    return dot;
+  }
+  // Spread the LEDs across the front edge of the dash (between TMS and ETCS panels)
+  const ledHead = indicator('HEAD',  -0.50, 0xff8a8a);
+  const ledDoor = indicator('DOORS', -0.30, 0xffe28a);
+  const ledDsd  = indicator('DSD',   -0.10, 0xff8a8a);
+  const ledTpws = indicator('TPWS',   0.10, 0xffaa66);
+  const ledRgs  = indicator('REGEN',  0.30, 0x9cff9c);
+  const ledHorn = indicator('HORN',   0.50, 0x8acfff);
+
+  // ==== Master controller — same pedestal/lever as 333 but on a wider chrome plinth ====
+  const pedMat = new THREE.MeshStandardMaterial({ color: 0x141618, roughness: 0.55, metalness: 0.30 });
+  const ped = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.16, 0.50), pedMat);
+  ped.position.set(0, 1.06, -0.85); g.add(ped);
+  // Chrome plinth top — wider than 333 for the "newer build" look
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.014, 0.50), trimMat);
+  plinth.position.set(0, 1.142, -0.85); g.add(plinth);
+
+  const notchTex = (() => {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 192;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,0,192);
+    grad.addColorStop(0,'#252830'); grad.addColorStop(1,'#15181c');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,1024,192);
+    const labels = ['EB','B5','B4','B3','B2','B1','OFF','P1','P2','P3','P4'];
+    ctx.font = 'bold 42px Orbitron, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    labels.forEach((l,i)=>{
+      const x = 60 + i * (904/(labels.length-1));
+      const isPwr = (l[0]==='P');
+      const isBrk = (l[0]==='B' || l==='EB');
+      ctx.fillStyle = isPwr ? '#9cffaf' : isBrk ? '#ffae66' : '#cfe6f7';
+      ctx.fillText(l, x, 88);
+      ctx.strokeStyle = 'rgba(180,210,235,0.45)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, 132); ctx.lineTo(x, 174); ctx.stroke();
+    });
+    ctx.fillStyle = '#000'; ctx.fillRect(40, 150, 944, 6);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const notchStrip = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.86, 0.16),
+    new THREE.MeshStandardMaterial({ map: notchTex, roughness: 0.55 })
+  );
+  notchStrip.rotation.x = -PI/2;
+  notchStrip.position.set(0, 1.150, -0.85);
+  g.add(notchStrip);
+  const notchDot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.022, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xff3030, emissiveIntensity: 1.0 })
+  );
+  notchDot.position.set(0, 1.165, -0.85);
+  g.add(notchDot);
+  // Lever — same red-and-chrome handle as 333 (still the Civity family)
+  const leverMat = new THREE.MeshStandardMaterial({ color: 0x9c1c1c, metalness: 0.5, roughness: 0.35 });
+  const lever = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.030, 0.40, 16), leverMat);
+  stick.position.y = 0.20; lever.add(stick);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.04, 16), new THREE.MeshStandardMaterial({ color: 0x202225, metalness: 0.7, roughness: 0.3 }));
+  collar.position.y = 0.04; lever.add(collar);
+  const pommel = new THREE.Mesh(new THREE.CapsuleGeometry(0.060, 0.10, 12, 18), leverMat);
+  pommel.position.y = 0.46; lever.add(pommel);
+  lever.position.set(0, 1.165, -0.85);
+  g.add(lever);
+
+  // ==== Side switches — flat illuminated pushbuttons (modern look vs 333 toggles) ====
+  function flatSwitch(label, x, defaultOn){
+    const grp = new THREE.Group();
+    grp.position.set(x, 1.090, -0.78);
+    grp.rotation.x = 0.08;
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.018, 0.10), panelMat);
+    grp.add(housing);
+    // Chrome bezel around the button
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.014, 0.085), trimMat);
+    bezel.position.y = 0.012;
+    grp.add(bezel);
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.068, 0.012, 0.068),
+      new THREE.MeshStandardMaterial({
+        color: defaultOn ? 0x9cffaf : 0x2a3038,
+        emissive: defaultOn ? 0x335533 : 0x000000,
+        emissiveIntensity: defaultOn ? 0.4 : 0.0,
+        roughness: 0.45
+      })
+    );
+    cap.position.y = 0.020;
+    grp.add(cap);
+    // Label below
+    const c = document.createElement('canvas'); c.width = 128; c.height = 32;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#15171a'; ctx.fillRect(0,0,128,32);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 16px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, 64, 16);
+    const lblTex = new THREE.CanvasTexture(c);
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.10, 0.025), new THREE.MeshBasicMaterial({ map: lblTex }));
+    plate.position.set(0, 0.022, 0.07); plate.rotation.x = -PI/2;
+    grp.add(plate);
+    g.add(grp);
+    return { cap, on: defaultOn };
+  }
+  const swHead     = flatSwitch('HEADLIGHTS', -0.95, false);
+  const swWipers   = flatSwitch('WIPERS',     -0.79, false);
+  const swCabLight = flatSwitch('CAB LT',     -0.63, true);
+
+  // Door release buttons — chrome-trimmed recessed plate to the right of the master controller
+  function doorBtn(label, x, color){
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(0.10, 0.04, 0.10),
+      new THREE.MeshStandardMaterial({ color: 0x1a1c1f, roughness: 0.55 })
+    );
+    housing.position.set(x, 1.085, -0.78);
+    housing.rotation.x = 0.08;
+    g.add(housing);
+    const bezel = new THREE.Mesh(
+      new THREE.BoxGeometry(0.085, 0.01, 0.085),
+      trimMat
+    );
+    bezel.position.set(x, 1.108, -0.78);
+    bezel.rotation.x = 0.08;
+    g.add(bezel);
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, 0.012, 0.07),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.15, roughness: 0.45 })
+    );
+    cap.position.set(x, 1.115, -0.78);
+    cap.rotation.x = 0.08;
+    g.add(cap);
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0,0,64,64);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 36px Orbitron'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, 32, 32);
+    const tex = new THREE.CanvasTexture(c);
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.05, 0.05),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+    );
+    plate.position.set(x, 1.122, -0.78);
+    plate.rotation.x = -PI/2 + 0.08;
+    g.add(plate);
+    return cap;
+  }
+  const doorBtnL = doorBtn('L', 0.62, 0x2a3038);
+  const doorBtnR = doorBtn('R', 0.74, 0x2a3038);
+
+  // Reverser key switch (left of door buttons, on a chrome plate)
+  const revHousing = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.04, 0.10),
+    new THREE.MeshStandardMaterial({ color: 0x16181a, roughness: 0.55 })
+  );
+  revHousing.position.set(0.48, 1.085, -0.78);
+  revHousing.rotation.x = 0.08;
+  g.add(revHousing);
+  const revKey = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.05, 12),
+    new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.85, roughness: 0.25 })
+  );
+  revKey.position.set(0.48, 1.115, -0.78);
+  revKey.rotation.x = 0.08;
+  g.add(revKey);
+
+  // Sander + pantograph + bell buttons on the pedestal apron
+  function smallBtn(x, color){
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.016, 0.012, 14),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 })
+    );
+    m.position.set(x, 1.150, -0.66);
+    g.add(m);
+  }
+  smallBtn(-0.10, 0xf0c020);   // sander
+  smallBtn(-0.04, 0x1a1a1c);   // pantograph reset
+  smallBtn( 0.04, 0x1a1a1c);   // pantograph up
+  smallBtn( 0.10, 0xc2191c);   // bell
+
+  // ==== EBP — Emergency Brake Plunger ====
+  const ebpShroud = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.085, 0.05, 24),
+    new THREE.MeshStandardMaterial({ color: 0x101114, roughness: 0.65, metalness: 0.25 })
+  );
+  ebpShroud.position.set(0.62, 1.16, -0.85); g.add(ebpShroud);
+  const ebpStem = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.030, 0.030, 0.04, 18),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.5, metalness: 0.3 })
+  );
+  ebpStem.position.set(0.62, 1.20, -0.85); g.add(ebpStem);
+  const ebpCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.060, 0.052, 0.025, 24),
+    new THREE.MeshStandardMaterial({ color: 0xc2191c, emissive: 0x300000, roughness: 0.45, metalness: 0.15 })
+  );
+  ebpCap.position.set(0.62, 1.22, -0.85); g.add(ebpCap);
+
+  // ==== Horn paddle ====
+  const hornHousing = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.16), panelMat);
+  hornHousing.position.set(-1.30, 1.16, -0.95); hornHousing.rotation.x = 0.08;
+  g.add(hornHousing);
+  const hornPaddle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0xffd23a, metalness: 0.3, roughness: 0.5 })
+  );
+  hornPaddle.position.set(-1.30, 1.20, -0.92); hornPaddle.rotation.x = 0.08;
+  g.add(hornPaddle);
+
+  // ==== GSM-R cab radio (left bulkhead — same Funkwerk MESA as 333) ====
+  const gsmrCase = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.20, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.7, metalness: 0.15 })
+  );
+  gsmrCase.position.set(-1.40, 1.55, -0.50);
+  gsmrCase.rotation.y = 0.35;
+  g.add(gsmrCase);
+  const gsmrFaceTex = (() => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 384;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1d1f22'; ctx.fillRect(0,0,512,384);
+    ctx.fillStyle = '#0d0f12'; ctx.fillRect(20,20,472,30);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 16px Orbitron'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('GSM-R   CAB RADIO', 36, 35);
+    ctx.fillStyle = '#0a1410'; ctx.fillRect(20,60,472,90);
+    ctx.fillStyle = '#9cff9c'; ctx.font = 'bold 22px Roboto Mono, monospace';
+    ctx.fillText('2L42  LDS-SKI', 36, 90);
+    ctx.fillStyle = '#5acd6e'; ctx.font = '16px Roboto Mono';
+    ctx.fillText('SIGNALLER  CONTACT', 36, 118);
+    ctx.fillText('RDY', 420, 118);
+    const keys = [
+      ['1','2','3','REG'],
+      ['4','5','6','SOS'],
+      ['7','8','9','END'],
+      ['*','0','#','ACK']
+    ];
+    ctx.font = 'bold 22px Orbitron';
+    for (let r = 0; r < 4; r++){
+      for (let k = 0; k < 4; k++){
+        const x = 30 + k*120, y = 175 + r*52;
+        ctx.fillStyle = (keys[r][k] === 'SOS') ? '#a01818' : '#2a2c2f';
+        ctx.fillRect(x, y, 100, 42);
+        ctx.strokeStyle = '#3a4350'; ctx.lineWidth = 2; ctx.strokeRect(x, y, 100, 42);
+        ctx.fillStyle = (keys[r][k] === 'SOS') ? '#fff8d8' : '#cfd9e4';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(keys[r][k], x+50, y+22);
+      }
+    }
+    return new THREE.CanvasTexture(c);
+  })();
+  const gsmrFace = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.24, 0.18),
+    new THREE.MeshStandardMaterial({ map: gsmrFaceTex, emissive: 0x101820, emissiveMap: gsmrFaceTex, emissiveIntensity: 0.3, roughness: 0.7 })
+  );
+  gsmrFace.position.set(-1.40, 1.55, -0.50);
+  gsmrFace.rotation.y = 0.35;
+  gsmrFace.translateZ(0.031);
+  g.add(gsmrFace);
+
+  // ==== Cab shell — same envelope as 333 but lighter palette ====
+  function sideLowerWall(x){
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.05, 2.55), wallMat);
+    m.position.set(x, 0.525, -0.35); g.add(m);
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.00, 2.50), wallInnerMat);
+    inner.position.set(x - Math.sign(x) * 0.025, 0.525, -0.35); g.add(inner);
+  }
+  function sideUpperWall(x){
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.45, 2.55), wallMat);
+    m.position.set(x, 2.275, -0.35); g.add(m);
+  }
+  function sideRearPillar(x){
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.00, 0.50), wallMat);
+    m.position.set(x, 1.55, 0.60); g.add(m);
+  }
+  sideLowerWall(-1.65); sideLowerWall(1.65);
+  sideUpperWall(-1.65); sideUpperWall(1.65);
+  sideRearPillar(-1.65); sideRearPillar(1.65);
+
+  const sideGlassMat = new THREE.MeshBasicMaterial({
+    color: 0xeaf3f8, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false
+  });
+  const sideGlassL = new THREE.Mesh(new THREE.PlaneGeometry(0.81, 1.00), sideGlassMat);
+  sideGlassL.rotation.y = PI/2; sideGlassL.position.set(-1.64, 1.55, -0.055); g.add(sideGlassL);
+  const sideGlassR = sideGlassL.clone(); sideGlassR.position.set(1.64, 1.55, -0.055); g.add(sideGlassR);
+
+  function windowTrim(x){
+    const sgn = Math.sign(x);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.020, 0.85), trimMat);
+    top.position.set(x - sgn * 0.005, 2.05, -0.055); g.add(top);
+    const bot = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.020, 0.85), trimMat);
+    bot.position.set(x - sgn * 0.005, 1.05, -0.055); g.add(bot);
+    const front = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.02, 0.020), trimMat);
+    front.position.set(x - sgn * 0.005, 1.55, -0.460); g.add(front);
+    const rear = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.02, 0.020), trimMat);
+    rear.position.set(x - sgn * 0.005, 1.55, 0.350); g.add(rear);
+  }
+  windowTrim(-1.64); windowTrim(1.64);
+
+  // Rear bulkhead (lighter paint than 333) — same texture composition but cooler tones.
+  const rearWallTex = (() => {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 768;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 768);
+    grad.addColorStop(0, '#4a4f56'); grad.addColorStop(1, '#34373d');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 1024, 768);
+    for (let i = 0; i < 4000; i++){
+      ctx.fillStyle = 'rgba(255,255,255,' + (Math.random()*0.04) + ')';
+      ctx.fillRect(Math.random()*1024, Math.random()*768, 1, 1);
+    }
+    const dx = 360, dy = 160, dw = 304, dh = 600;
+    ctx.fillStyle = '#36393d'; ctx.fillRect(dx, dy, dw, dh);
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 6; ctx.strokeRect(dx, dy, dw, dh);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2;
+    ctx.strokeRect(dx + 20, dy + 20, dw - 40, dh - 40);
+    const vx = dx + 60, vy = dy + 60, vw = dw - 120, vh = 140;
+    ctx.fillStyle = '#1a2026'; ctx.fillRect(vx, vy, vw, vh);
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 4; ctx.strokeRect(vx, vy, vw, vh);
+    ctx.fillStyle = '#b0b6be'; ctx.fillRect(dx + dw - 70, dy + dh/2 - 70, 14, 140);
+    ctx.fillStyle = '#15171a'; ctx.fillRect(dx + 30, dy - 90, dw - 60, 60);
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 3; ctx.strokeRect(dx + 30, dy - 90, dw - 60, 60);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 22px Orbitron, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('TO PASSENGER COMPARTMENT', dx + dw/2, dy - 60);
+    ctx.fillStyle = '#1a1c1f'; ctx.fillRect(80, 220, 180, 180);
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 4; ctx.strokeRect(80, 220, 180, 180);
+    ctx.fillStyle = '#cfd9e4'; ctx.font = 'bold 16px Roboto Mono, monospace';
+    ctx.textAlign = 'left'; ctx.fillText('FIRE EXT.', 100, 250);
+    ctx.fillStyle = '#c2191c'; ctx.fillRect(110, 270, 60, 110);
+    ctx.fillStyle = '#1a1a1c'; ctx.fillRect(120, 280, 40, 90);
+    ctx.fillStyle = '#f5f5f0'; ctx.fillRect(770, 220, 170, 180);
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 4; ctx.strokeRect(770, 220, 170, 180);
+    ctx.fillStyle = '#0a8a3a';
+    ctx.fillRect(820, 270, 70, 22); ctx.fillRect(842, 248, 22, 70);
+    ctx.fillStyle = '#0d0e10'; ctx.font = 'bold 18px Roboto Mono';
+    ctx.textAlign = 'center'; ctx.fillText('FIRST AID', 855, 360);
+    return new THREE.CanvasTexture(c);
+  })();
+  rearWallTex.colorSpace = THREE.SRGBColorSpace;
+  rearWallTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const rearWall = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.30, 2.45),
+    new THREE.MeshStandardMaterial({ map: rearWallTex, roughness: 0.85 })
+  );
+  rearWall.position.set(0, 1.225, 0.85);
+  rearWall.rotation.y = PI;
+  g.add(rearWall);
+  const rearBack = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.30, 2.45),
+    new THREE.MeshStandardMaterial({ color: 0x101113, roughness: 0.9 })
+  );
+  rearBack.position.set(0, 1.225, 0.86); g.add(rearBack);
+  const doorHandle = new THREE.Mesh(
+    new THREE.BoxGeometry(0.025, 0.30, 0.020),
+    new THREE.MeshStandardMaterial({ color: 0xb0b6be, metalness: 0.85, roughness: 0.3 })
+  );
+  doorHandle.position.set(0.30, 1.20, 0.832); g.add(doorHandle);
+
+  // Grab handle, coat hook, fan grille, ceiling light strip, emergency door handle
+  const grabMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, metalness: 0.85, roughness: 0.3 });
+  const grabL = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.012, 8, 16, PI), grabMat);
+  grabL.rotation.set(0, PI/2, 0);
+  grabL.position.set(-1.60, 2.10, -0.30); g.add(grabL);
+  const hook = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.08, 8), grabMat);
+  hook.rotation.x = PI/2; hook.position.set(-1.20, 1.85, 0.79); g.add(hook);
+  const fanTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1a1c1f'; ctx.fillRect(0,0,256,256);
+    ctx.strokeStyle = '#0d0e10'; ctx.lineWidth = 4;
+    for (let r = 30; r < 120; r += 12){ ctx.beginPath(); ctx.arc(128,128, r, 0, PI*2); ctx.stroke(); }
+    ctx.lineWidth = 6; ctx.beginPath();
+    ctx.moveTo(128, 12); ctx.lineTo(128, 244);
+    ctx.moveTo(12, 128); ctx.lineTo(244, 128); ctx.stroke();
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.arc(128,128, 120, 0, PI*2); ctx.stroke();
+    return new THREE.CanvasTexture(c);
+  })();
+  const fanGrille = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.30, 0.30),
+    new THREE.MeshStandardMaterial({ map: fanTex, roughness: 0.7, metalness: 0.3 })
+  );
+  fanGrille.rotation.x = PI/2;
+  fanGrille.position.set(-0.40, 2.42, -0.30); g.add(fanGrille);
+  const ceilLight = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4, 0.04, 0.18),
+    new THREE.MeshStandardMaterial({ color: 0xfff8e8, emissive: 0xfff8e8, emissiveIntensity: 0.45, roughness: 0.6 })
+  );
+  ceilLight.position.set(0, 2.42, -0.95); g.add(ceilLight);
+  const eDoorHousing = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.16, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xf4c41a, roughness: 0.7 })
+  );
+  eDoorHousing.position.set(-0.50, 1.20, 0.832); g.add(eDoorHousing);
+  const eDoorHandle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.018, 0.018, 0.10, 12),
+    new THREE.MeshStandardMaterial({ color: 0xc2191c, roughness: 0.45, metalness: 0.15 })
+  );
+  eDoorHandle.position.set(-0.50, 1.20, 0.815); g.add(eDoorHandle);
+  const slideTrackMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.85, roughness: 0.3 });
+  const slideTrackL = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.020, 0.92), slideTrackMat);
+  slideTrackL.position.set(-1.62, 2.04, -0.10); g.add(slideTrackL);
+  const slideTrackR = slideTrackL.clone(); slideTrackR.position.set(1.62, 2.04, -0.10); g.add(slideTrackR);
+
+  // ==== Return shape — same keys as buildCab333. Analogue-only refs are null. ====
+  return {
+    group: g,
+    // No analogue gauges on 331 — speedoNeedle, pressNeedle, mrNeedle are null
+    // and updateCabAnim guards them.
+    speedoNeedle: null, pressNeedle: null, pressNeedle2: null, mrNeedle: null,
+    lever, notchDot,
+    awsMat, awsTexN, awsTexW,
+    ledHead, ledDoor, ledDsd, ledTpws, ledRgs, ledHorn,
+    // swHead/swWipers/swCabLight kept as objects with a `cap` field so any future
+    // code can drive them; 333 returns the legacy `{toggle, on}` shape and we don't
+    // touch either from animation, so this is purely a future-proofing hook.
+    swHead, swWipers, swCabLight,
+    wL, wR,
+    draMat, draCap,
+    tpwsBtnOverride, tpwsBtnBrakeDem, tpwsBtnIsolation,
+    doorBtnL, doorBtnR,
+    // The "speedDigits" hooks point at the DMI canvas — drawSpeedDigits repaints
+    // the whole DMI with current state on each frame. This keeps updateCabAnim's
+    // existing call site unchanged.
+    speedDigitsCanvas: dmiObj.canvas,
+    speedDigitsCtx:    dmiObj.ctx,
+    speedDigitsTex:    dmiObj.tex,
+    drawSpeedDigits:   drawDmi,
+    drawDmi,           // alias for future direct callers
+    dmiTex: dmiObj.tex,
+  };
+}
+
+// ==== Dispatcher: build the cab matching the active train spec ====
+function buildCab(spec){
+  switch (spec.cabBuilder){
+    case 'buildCab331': return buildCab331(spec);
+    case 'buildCab333':
+    default:            return buildCab333(spec);
+  }
+}
+
+// Repaint dynamic platform stop-markers (e.g. Shipley's "4 CAR" / "3 CAR" plate)
+// to reflect the active unit's car count. Called whenever the user picks a
+// different unit so the marker visibly matches what the player is driving.
+function repaintStopMarkers(){
+  ROUTE.stations.forEach(s => {
+    if (s.stopMarker === 'cars' && s._markerPaint && s._markerTex){
+      s._markerPaint(GS.train.cars + ' CAR');
+      s._markerTex.needsUpdate = true;
+    }
+  });
+}
+
+// Rebuild the active cab if the desired spec differs from what's mounted.
+// Called from beginService() once the user has picked a unit. The first call
+// (after page load) builds the default-spec cab so the menu's preview never
+// shows an empty cabGroup.
+function buildAndAttachCab(spec){
+  if (_builtCabKey === spec.key && cab) return;
+  // Tear down previous cab cleanly. We dispose of geometries/materials to keep
+  // the WebGL context happy across repeated model swaps.
+  if (cab && cab.group){
+    cabGroup.remove(cab.group);
+    cab.group.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material){
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+  }
+  cab = buildCab(spec);
+  cabGroup.add(cab.group);
+  _builtCabKey = spec.key;
+  // Lineside stop-markers (Shipley's "N CAR" plate) follow the active unit.
+  repaintStopMarkers();
+}
+// First-cab attach is deferred until after GS is declared (further down the
+// file), since buildAndAttachCab reads GS.train. The Boot block at the bottom
+// of the script handles this.
 
 // ============================================================
 // AUDIO ENGINE — procedural via WebAudio (no external assets)
@@ -2748,6 +3828,13 @@ function initAudio(){
   if (AUDIO.initialised) {
     // Browsers may have suspended the context after the gesture window closed.
     if (AUDIO.ctx && AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume();
+    // If the user picked a different unit since the last init, rebuild the
+    // traction oscillators so the oscillator *type* (sawtooth vs sine) — not
+    // just the frequencies — reflects the active unit.
+    if (AUDIO._trainKey !== GS.train.key){
+      rebuildTractionAudio();
+      AUDIO._trainKey = GS.train.key;
+    }
     return;
   }
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2757,13 +3844,16 @@ function initAudio(){
   AUDIO.ctx = ctx;
   AUDIO.master = ctx.createGain(); AUDIO.master.gain.value = 0.55; AUDIO.master.connect(ctx.destination);
 
-  // TRACTION — two saw oscillators through a low-pass filter, frequency tracks speed.
-  // Class 333 has a noticeable inverter whine; we approximate with two close-tuned oscillators.
+  // TRACTION — two oscillators through a low-pass filter, frequency tracks speed.
+  // Oscillator types, base frequencies and filter cutoff come from the active
+  // train's audio spec, so the 333's older IGBT growl and the 331's cleaner /
+  // higher-pitched drive sound visibly different.
+  const ta = GS.train.audio;
   AUDIO.tractionGain = ctx.createGain(); AUDIO.tractionGain.gain.value = 0;
   AUDIO.tractionFilter = ctx.createBiquadFilter();
-  AUDIO.tractionFilter.type = 'lowpass'; AUDIO.tractionFilter.frequency.value = 900;
-  AUDIO.tractionOsc1 = ctx.createOscillator(); AUDIO.tractionOsc1.type = 'sawtooth'; AUDIO.tractionOsc1.frequency.value = 60;
-  AUDIO.tractionOsc2 = ctx.createOscillator(); AUDIO.tractionOsc2.type = 'square';   AUDIO.tractionOsc2.frequency.value = 90;
+  AUDIO.tractionFilter.type = 'lowpass'; AUDIO.tractionFilter.frequency.value = ta.tractionFilterCutoff;
+  AUDIO.tractionOsc1 = ctx.createOscillator(); AUDIO.tractionOsc1.type = ta.tractionOsc1Type; AUDIO.tractionOsc1.frequency.value = ta.tractionOsc1BaseHz;
+  AUDIO.tractionOsc2 = ctx.createOscillator(); AUDIO.tractionOsc2.type = ta.tractionOsc2Type; AUDIO.tractionOsc2.frequency.value = ta.tractionOsc2BaseHz;
   const o1g = ctx.createGain(); o1g.gain.value = 0.5;
   const o2g = ctx.createGain(); o2g.gain.value = 0.25;
   AUDIO.tractionOsc1.connect(o1g).connect(AUDIO.tractionFilter);
@@ -2798,19 +3888,41 @@ function initAudio(){
   AUDIO.hornOsc1.start(); AUDIO.hornOsc2.start();
 
   AUDIO.initialised = true;
+  AUDIO._trainKey = GS.train.key;
+}
+// Stop the existing traction oscillators and rebuild with the active train's
+// oscillator types and base frequencies. Called from initAudio() when the
+// active train changes between services.
+function rebuildTractionAudio(){
+  const ctx = AUDIO.ctx; if (!ctx) return;
+  const ta = GS.train.audio;
+  try { AUDIO.tractionOsc1.stop(); } catch(e){}
+  try { AUDIO.tractionOsc2.stop(); } catch(e){}
+  try { AUDIO.tractionOsc1.disconnect(); } catch(e){}
+  try { AUDIO.tractionOsc2.disconnect(); } catch(e){}
+  AUDIO.tractionFilter.frequency.value = ta.tractionFilterCutoff;
+  AUDIO.tractionOsc1 = ctx.createOscillator(); AUDIO.tractionOsc1.type = ta.tractionOsc1Type; AUDIO.tractionOsc1.frequency.value = ta.tractionOsc1BaseHz;
+  AUDIO.tractionOsc2 = ctx.createOscillator(); AUDIO.tractionOsc2.type = ta.tractionOsc2Type; AUDIO.tractionOsc2.frequency.value = ta.tractionOsc2BaseHz;
+  const o1g = ctx.createGain(); o1g.gain.value = 0.5;
+  const o2g = ctx.createGain(); o2g.gain.value = 0.25;
+  AUDIO.tractionOsc1.connect(o1g).connect(AUDIO.tractionFilter);
+  AUDIO.tractionOsc2.connect(o2g).connect(AUDIO.tractionFilter);
+  AUDIO.tractionOsc1.start(); AUDIO.tractionOsc2.start();
 }
 function audioTick(state, dt){
   if (!AUDIO.initialised) return;
   const ctx = AUDIO.ctx;
-  // Traction: gain ramps with throttle*speed; pitch with speed
+  // Traction: gain ramps with throttle*speed; pitch with speed. Per-train tuning
+  // (oscillator pitch slope, filter sweep) comes from GS.train.audio.
+  const ta = GS.train.audio;
   const speed = state.v;
   const power = max(0, state.notch);    // notch >0 = power
-  const tractionTarget = power * 0.18 * smoothstep(0.5, 25, speed);
+  const tractionTarget = power * ta.tractionGainScale * smoothstep(0.5, 25, speed);
   AUDIO.tractionGain.gain.linearRampToValueAtTime(tractionTarget, ctx.currentTime + 0.15);
-  const baseHz = 50 + speed * 4.5;
+  const baseHz = ta.tractionOsc1BaseHz - 10 + speed * ta.tractionPitchPerMs;
   AUDIO.tractionOsc1.frequency.linearRampToValueAtTime(baseHz, ctx.currentTime + 0.2);
-  AUDIO.tractionOsc2.frequency.linearRampToValueAtTime(baseHz * 1.5, ctx.currentTime + 0.2);
-  AUDIO.tractionFilter.frequency.linearRampToValueAtTime(400 + speed * 25, ctx.currentTime + 0.2);
+  AUDIO.tractionOsc2.frequency.linearRampToValueAtTime(baseHz * ta.tractionOsc2Ratio, ctx.currentTime + 0.2);
+  AUDIO.tractionFilter.frequency.linearRampToValueAtTime(ta.tractionFilterBase + speed * ta.tractionFilterPerMs, ctx.currentTime + 0.2);
 
   // Brake hiss: gain ramps with brake notch, only above standstill
   const brake = max(0, -state.notch);
@@ -2875,6 +3987,7 @@ const GS = {
   nextSignalIdx: 0,
   demo: false,               // autopilot drives the train when true
   timeScale: 1.0,            // sim-time multiplier (1× normal, 2× when '2× speed' checkbox is on)
+  train: TRAINS.t333,        // active rolling-stock spec (swapped by menu before beginService)
 };
 const DEMO_DECEL = 0.55;       // m/s², autopilot brake target — well under maxBrake
 
@@ -2894,7 +4007,7 @@ const NOTCH_KEYS = {
   'ArrowLeft': -1, 'KeyA': -1,
 };
 function bumpNotch(delta){
-  let next = clamp(GS.notch + delta, -6, T333.powerNotches - 1);
+  let next = clamp(GS.notch + delta, -6, GS.train.powerNotches - 1);
   // DRA inhibits traction — clamp at OFF when set
   if (GS.dra && next > 0) next = 0;
   GS.notch = next;
@@ -3052,7 +4165,7 @@ function demoAutopilot(){
   // distM=0 and target=0, holding notch at 0 forever (deadlock). Force
   // full power until v exceeds the 1 m/s gate that updateStations
   // watches for to advance the station pointer.
-  if (GS.stopState === 'departed'){ GS.notch = T333.powerNotches - 1; return; }
+  if (GS.stopState === 'departed'){ GS.notch = GS.train.powerNotches - 1; return; }
   const target = demoTargetSpeed();
   const err = GS.v - target;     // positive = above target
   if      (err >  2.0) GS.notch = -4;     // hard brake
@@ -3077,18 +4190,19 @@ function physicsStep(dt){
   // Tractive / brake force from notch
   const notch = GS.notch;
   let accel = 0;
+  const train = GS.train;
   if (notch > 0){
-    const frac = notch / T333.powerNotches;       // 0..1
-    accel = T333.maxAccel * frac;
+    const frac = notch / train.powerNotches;       // 0..1
+    accel = train.maxAccel * frac;
   } else if (notch < 0){
     const isEmerg = notch === -6;
     const frac = isEmerg ? 1.0 : (-notch) / 5;     // B1..B5 → 0.2..1.0
-    accel = - (isEmerg ? T333.emergBrake : T333.maxBrake) * frac;
+    accel = - (isEmerg ? train.emergBrake : train.maxBrake) * frac;
   }
   // Davis equation rolling/aero resistance (simplified). Always opposes motion; zero at standstill.
   const v = GS.v;
   if (v > 0.05) {
-    const drag = (T333.davisA + T333.davisB*v + T333.davisC*v*v) * 0.20;
+    const drag = (train.davisA + train.davisB*v + train.davisC*v*v) * 0.20;
     accel -= drag;
   }
 
@@ -3252,26 +4366,34 @@ function updateCabAnim(dt){
   // angle -t. Solving for the needle rotation that points at canvas angle a
   // gives z = -π/2 - a.
   const mph = GS.v * MS_TO_MPH;
-  const tSpd = clamp(mph / 100, 0, 1);
-  const aSpd = (PI*0.75) + tSpd * (PI*1.5);
-  cab.speedoNeedle.rotation.set(-PI/2, 0, -PI/2 - aSpd);
+  // Analogue dials only exist on the 333 cab; 331 returns null needles and renders
+  // its readouts on the central DMI canvas (via drawSpeedDigits below).
+  if (cab.speedoNeedle){
+    const tSpd = clamp(mph / 100, 0, 1);
+    const aSpd = (PI*0.75) + tSpd * (PI*1.5);
+    cab.speedoNeedle.rotation.set(-PI/2, 0, -PI/2 - aSpd);
+  }
 
   // Duplex pressure gauge:
   //  • Red needle  = brake cylinder (BC) — rises with brake demand
   //  • Black needle = brake pipe (BP)    — drops as brakes apply (5→3.5 bar)
-  const pBar = clamp((GS.notch < 0 ? -GS.notch : 0), 0, 5);
-  const aP = (PI*0.75) + (pBar / 5) * (PI*1.5);
-  cab.pressNeedle.rotation.set(-PI/2, 0, -PI/2 - aP);
-  if (cab.pressNeedle2){
-    const bp = clamp(5.0 - pBar * 0.25, 3.4, 5.0);
-    const aBP = (PI*0.75) + (bp / 5) * (PI*1.5);
-    cab.pressNeedle2.rotation.set(-PI/2, 0, -PI/2 - aBP);
+  if (cab.pressNeedle){
+    const pBar = clamp((GS.notch < 0 ? -GS.notch : 0), 0, 5);
+    const aP = (PI*0.75) + (pBar / 5) * (PI*1.5);
+    cab.pressNeedle.rotation.set(-PI/2, 0, -PI/2 - aP);
+    if (cab.pressNeedle2){
+      const bp = clamp(5.0 - pBar * 0.25, 3.4, 5.0);
+      const aBP = (PI*0.75) + (bp / 5) * (PI*1.5);
+      cab.pressNeedle2.rotation.set(-PI/2, 0, -PI/2 - aBP);
+    }
   }
 
   // Main-reservoir pressure (0..12 bar). Sits steady around 9 bar with a wobble.
-  const mrBar = 8.8 + sin(GS.serviceTime * 0.6) * 0.15;
-  const aMR = (PI*0.75) + (mrBar / 12) * (PI*1.5);
-  cab.mrNeedle.rotation.set(-PI/2, 0, -PI/2 - aMR);
+  if (cab.mrNeedle){
+    const mrBar = 8.8 + sin(GS.serviceTime * 0.6) * 0.15;
+    const aMR = (PI*0.75) + (mrBar / 12) * (PI*1.5);
+    cab.mrNeedle.rotation.set(-PI/2, 0, -PI/2 - aMR);
+  }
 
   // DRA lamp — emissive glow when set, dim when cancelled
   if (cab.draMat){
@@ -3500,6 +4622,10 @@ function buildMenuList(){
 }
 
 function beginService(demo){
+  // Cab geometry, audio oscillator types and physics all depend on the
+  // currently-selected unit. Build/swap the cab first so the windscreen-view
+  // is already populated before initAudio() touches the WebAudio graph.
+  buildAndAttachCab(GS.train);
   initAudio();
   document.getElementById('menu').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
@@ -3519,6 +4645,23 @@ function beginService(demo){
   const tag = GS.timeScale > 1.5 ? ' (2×)' : '';
   showMsg(demo ? `DEMO RUN — AUTOPILOT ENGAGED${tag}` : `RIGHT AWAY — SIGNAL OFF — PROCEED${tag}`, '', 3.0);
 }
+// Unit selector — clicking a unit button sets the active train and updates
+// the menu subtitle / page title. The selection persists across menu reopens.
+function selectTrain(key){
+  if (!TRAINS[key]) return;
+  GS.train = TRAINS[key];
+  document.querySelectorAll('#unitSelect .unitBtn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.train === key);
+  });
+  const name = GS.train.name;
+  document.getElementById('menuSub').textContent = name + ' — Driver Simulator';
+  document.title = 'Airedale Line — ' + name + ' Driver Simulator';
+}
+document.querySelectorAll('#unitSelect .unitBtn').forEach(b => {
+  b.addEventListener('click', () => selectTrain(b.dataset.train));
+});
+selectTrain(GS.train.key);   // initialise selected-state styling on page load
+
 document.getElementById('startBtn').addEventListener('click', () => beginService(false));
 document.getElementById('demoBtn').addEventListener('click', () => beginService(true));
 document.getElementById('resumeBtn').addEventListener('click', togglePause);
@@ -3536,10 +4679,14 @@ function togglePause(){
 }
 
 // Expose module-scope state for browser-console debugging.
-window.SIM = { GS, ROUTE, T333, scene, camera, renderer, cab, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts, riverLatAt, demoAutopilot, demoTargetSpeed, physicsStep, updateStations, get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;}, get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
+window.SIM = { GS, ROUTE, TRAINS, T333, scene, camera, renderer, get cab(){return cab;}, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts, riverLatAt, demoAutopilot, demoTargetSpeed, physicsStep, updateStations, buildAndAttachCab, selectTrain, get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;}, get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
 
 // Boot
 buildMenuList();
+// Build the default-unit cab now — GS is declared above, so reading GS.train
+// here is safe. Doing it before the render loop starts ensures cabGroup is
+// populated on the very first frame (the menu sits on top until START).
+buildAndAttachCab(GS.train);
 document.getElementById('loading').style.display = 'none';
 document.getElementById('menu').style.display = 'flex';
 loop();
