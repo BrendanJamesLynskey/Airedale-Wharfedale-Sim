@@ -253,16 +253,18 @@ const TRAINS = {
     cabBuilder: 'buildCab333',         // dispatcher target
     tmsLabel: 'CLASS 333  TMS',
     speedoUnits: 'CLASS 333',
-    // Audio: inverter whine is a Class 333 trait. Two close-tuned oscillators
-    // (saw + square) into a 900 Hz LPF gives the older IGBT-drive growl.
+    // Audio: inverter whine is a Class 333 trait. Real 333s have an audible
+    // ABB GTO-inverter whine sitting around 150 Hz at low speed and sweeping
+    // up past 500 Hz at line speed — much higher than the previous tuning,
+    // which had too much low-end growl and no clear "whine" character.
     audio: {
-      tractionOsc1Type: 'sawtooth', tractionOsc1BaseHz: 60,
-      tractionOsc2Type: 'square',   tractionOsc2BaseHz: 90,
-      tractionFilterCutoff: 900,
-      tractionPitchPerMs: 4.5,          // Hz added to osc1 per m/s of speed
+      tractionOsc1Type: 'sawtooth', tractionOsc1BaseHz: 150,
+      tractionOsc2Type: 'square',   tractionOsc2BaseHz: 225,
+      tractionFilterCutoff: 2000,
+      tractionPitchPerMs: 11.0,         // Hz added to osc1 per m/s of speed
       tractionOsc2Ratio: 1.5,
-      tractionFilterPerMs: 25,          // Hz added to LPF per m/s
-      tractionFilterBase: 400,
+      tractionFilterPerMs: 55,          // Hz added to LPF per m/s
+      tractionFilterBase: 900,
       tractionGainScale: 0.18,
     },
   },
@@ -283,15 +285,18 @@ const TRAINS = {
     cabBuilder: 'buildCab331',
     tmsLabel: 'CLASS 331/0  DMI',
     speedoUnits: 'CLASS 331/0',
-    // Audio: newer Bombardier drive — cleaner, slightly higher whine, less low-end growl.
+    // Audio: modern CAF Civity with Mitsubishi IGBT drive — a distinctively
+    // high-pitched, clean tonal whine. Real 331s sweep from ~300 Hz off the
+    // mark up past 1200 Hz at line speed. Heavier overtone (square + octave)
+    // gives the bright "almost-resonant" warble heard at acceleration peaks.
     audio: {
-      tractionOsc1Type: 'sawtooth', tractionOsc1BaseHz: 95,
-      tractionOsc2Type: 'sine',     tractionOsc2BaseHz: 142,
-      tractionFilterCutoff: 1400,
-      tractionPitchPerMs: 6.5,
+      tractionOsc1Type: 'sawtooth', tractionOsc1BaseHz: 320,
+      tractionOsc2Type: 'square',   tractionOsc2BaseHz: 480,
+      tractionFilterCutoff: 3200,
+      tractionPitchPerMs: 18.0,
       tractionOsc2Ratio: 1.5,
-      tractionFilterPerMs: 35,
-      tractionFilterBase: 600,
+      tractionFilterPerMs: 80,
+      tractionFilterBase: 1400,
       tractionGainScale: 0.14,
     },
   },
@@ -3814,7 +3819,7 @@ const AUDIO = {
   tractionGain: null, tractionOsc1: null, tractionOsc2: null, tractionFilter: null, tractionLfo: null, tractionLfoGain: null,
   brakeNoise: null, brakeNoiseGain: null,
   awsGain: null, awsOsc: null,
-  hornGain: null, hornOsc1: null, hornOsc2: null,
+  hornGain: null, hornLow: null, hornHigh: null, hornVibrato: null, hornVibratoGain: null,
   initialised: false,
 };
 function makeNoiseBuffer(ctx, dur){
@@ -3878,14 +3883,69 @@ function initAudio(){
   AUDIO.awsOsc.connect(awsFilt).connect(AUDIO.awsGain).connect(AUDIO.master);
   AUDIO.awsOsc.start();
 
-  // HORN — two-tone, high+low
+  // HORN — UK standard two-tone air horn. Realistic version:
+  //   • each "tone" is a pair of detuned oscillators (saw + square ~3 Hz apart)
+  //     plus a softer octave overtone — gives the brass "beating" quality
+  //     rather than a pure synth tone.
+  //   • a 5.5 Hz sine vibrato modulates both voices' pitch by ~3 Hz, mimicking
+  //     the slight pulse from air pressure.
+  //   • a touch of bandpassed pink noise rides on top — the "air rush" you can
+  //     hear from a real horn just behind the tonal blast.
+  //   • voice selection (high/low) uses per-voice gain rather than retuning a
+  //     shared oscillator, so the unused voice doesn't bleed through.
+  //   • lowpass cutoff is wide (5 kHz) so harmonics survive — the previous
+  //     2.2 kHz cap clipped most of the brass brightness.
+  // Frequencies match the typical UK rail two-tone pair: low D#4 (311 Hz) /
+  // high F#4 (370 Hz) — a minor third.
   AUDIO.hornGain = ctx.createGain(); AUDIO.hornGain.gain.value = 0;
-  AUDIO.hornOsc1 = ctx.createOscillator(); AUDIO.hornOsc1.type = 'sawtooth'; AUDIO.hornOsc1.frequency.value = 370;   // F#4
-  AUDIO.hornOsc2 = ctx.createOscillator(); AUDIO.hornOsc2.type = 'sawtooth'; AUDIO.hornOsc2.frequency.value = 246;   // B3
-  const hf = ctx.createBiquadFilter(); hf.type='lowpass'; hf.frequency.value=2200;
-  AUDIO.hornOsc1.connect(hf); AUDIO.hornOsc2.connect(hf);
-  hf.connect(AUDIO.hornGain).connect(AUDIO.master);
-  AUDIO.hornOsc1.start(); AUDIO.hornOsc2.start();
+  function makeHornVoice(baseHz){
+    const o1 = ctx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = baseHz;
+    const o2 = ctx.createOscillator(); o2.type = 'square';   o2.frequency.value = baseHz + 3;
+    const o3 = ctx.createOscillator(); o3.type = 'sawtooth'; o3.frequency.value = baseHz * 2;     // octave overtone
+    const mix = ctx.createGain(); mix.gain.value = 0.55;
+    const oct = ctx.createGain(); oct.gain.value = 0.18;     // softer octave so it tints, not dominates
+    const voiceGain = ctx.createGain(); voiceGain.gain.value = 0;    // selected via audioTick
+    o1.connect(mix); o2.connect(mix); o3.connect(oct);
+    mix.connect(voiceGain); oct.connect(voiceGain);
+    return { o1, o2, o3, voiceGain };
+  }
+  AUDIO.hornLow  = makeHornVoice(311);    // D#4 — UK low tone
+  AUDIO.hornHigh = makeHornVoice(370);    // F#4 — UK high tone
+
+  // Pitch vibrato — slow sine LFO summed onto every oscillator's detune input
+  AUDIO.hornVibrato = ctx.createOscillator(); AUDIO.hornVibrato.type = 'sine';
+  AUDIO.hornVibrato.frequency.value = 5.5;
+  AUDIO.hornVibratoGain = ctx.createGain(); AUDIO.hornVibratoGain.gain.value = 3.0;   // ±3 Hz
+  AUDIO.hornVibrato.connect(AUDIO.hornVibratoGain);
+  [AUDIO.hornLow, AUDIO.hornHigh].forEach(v => {
+    AUDIO.hornVibratoGain.connect(v.o1.frequency);
+    AUDIO.hornVibratoGain.connect(v.o2.frequency);
+  });
+  AUDIO.hornVibrato.start();
+
+  // Air-rush noise — bandpassed around 2.4 kHz, gated by the same envelope
+  // as the tone (hornGain) so it only sounds while the horn is held.
+  const hornNoise = ctx.createBufferSource();
+  hornNoise.buffer = makeNoiseBuffer(ctx, 2.0);
+  hornNoise.loop = true;
+  const hornNoiseBp = ctx.createBiquadFilter();
+  hornNoiseBp.type = 'bandpass'; hornNoiseBp.frequency.value = 2400; hornNoiseBp.Q.value = 1.1;
+  const hornNoiseGain = ctx.createGain(); hornNoiseGain.gain.value = 0.07;
+  hornNoise.connect(hornNoiseBp).connect(hornNoiseGain);
+  hornNoise.start();
+
+  // Wide-open lowpass keeps the brass character
+  const hornLpf = ctx.createBiquadFilter();
+  hornLpf.type = 'lowpass'; hornLpf.frequency.value = 5000;
+
+  // Sum everything into hornLpf → hornGain → master
+  AUDIO.hornLow.voiceGain.connect(hornLpf);
+  AUDIO.hornHigh.voiceGain.connect(hornLpf);
+  hornNoiseGain.connect(hornLpf);
+  hornLpf.connect(AUDIO.hornGain).connect(AUDIO.master);
+
+  AUDIO.hornLow.o1.start();  AUDIO.hornLow.o2.start();  AUDIO.hornLow.o3.start();
+  AUDIO.hornHigh.o1.start(); AUDIO.hornHigh.o2.start(); AUDIO.hornHigh.o3.start();
 
   AUDIO.initialised = true;
   AUDIO._trainKey = GS.train.key;
@@ -3940,15 +4000,15 @@ function audioTick(state, dt){
     AUDIO.awsGain.gain.linearRampToValueAtTime(0.0, ctx.currentTime + 0.10);
   }
 
-  // Horn
-  AUDIO.hornGain.gain.linearRampToValueAtTime(state.horn ? 0.30 : 0, ctx.currentTime + 0.04);
-  if (state.hornHigh){
-    AUDIO.hornOsc1.frequency.value = 740;
-    AUDIO.hornOsc2.frequency.value = 494;
-  } else {
-    AUDIO.hornOsc1.frequency.value = 370;
-    AUDIO.hornOsc2.frequency.value = 246;
-  }
+  // Horn — sharp 25 ms attack on the master gain (mimics the air-valve opening),
+  // then per-voice selection: only one tone is audible at a time. The other
+  // voice's gain ramps off so it doesn't bleed through while the active voice
+  // ramps in. A tiny ~10 ms ramp on each voice avoids click artefacts.
+  AUDIO.hornGain.gain.linearRampToValueAtTime(state.horn ? 0.34 : 0, ctx.currentTime + 0.025);
+  const wantHigh = !!(state.horn && state.hornHigh);
+  const wantLow  = !!(state.horn && !state.hornHigh);
+  AUDIO.hornHigh.voiceGain.gain.linearRampToValueAtTime(wantHigh ? 1 : 0, ctx.currentTime + 0.012);
+  AUDIO.hornLow.voiceGain.gain.linearRampToValueAtTime(wantLow  ? 1 : 0, ctx.currentTime + 0.012);
 }
 
 // ============================================================
