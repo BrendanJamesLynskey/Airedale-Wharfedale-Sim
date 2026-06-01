@@ -1,10 +1,10 @@
-# Airedale & Wharfedale Line — Driver Simulator
+# Yorkshire Train Simulator
 
-A browser-based train driver simulator for the Airedale and Wharfedale lines
-in West Yorkshire, England. The menu picks the route — the full **Leeds →
-Skipton** Airedale service (11 stations, 41.8 km) or the **Shipley → Ilkley**
-Wharfedale branch (7 stations, 17.0 km) — and the unit, either **Class 333**
-or **Class 331/0**.
+A browser-based train driver simulator covering passenger lines in
+West Yorkshire, England. The menu picks the route — the full **Leeds →
+Skipton** Airedale service (11 stations, 41.8 km) or the **Shipley →
+Ilkley** Wharfedale branch (7 stations, 17.0 km) — and the unit, either
+**Class 333** or **Class 331/0**.
 
 [Play it here](https://brendanjameslynskey.github.io/Airedale-Wharfedale-Sim/)
 

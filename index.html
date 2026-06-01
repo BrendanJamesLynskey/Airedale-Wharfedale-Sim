@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0a0a0a">
-<title>Airedale Line — Class 333 Driver Simulator</title>
+<title>Yorkshire Train Simulator</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Roboto+Mono:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -68,10 +68,10 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 </head>
 <body>
 
-<div id="loading">LOADING — AIREDALE LINE</div>
+<div id="loading">LOADING — YORKSHIRE TRAIN SIMULATOR</div>
 
 <div id="menu" style="display:none;">
-  <h1 id="menuTitle">AIREDALE LINE</h1>
+  <h1 id="menuTitle">YORKSHIRE TRAIN SIMULATOR</h1>
   <div class="sub" id="menuSub">Class 333 — Driver Simulator</div>
   <div class="panel">
     <h2 id="menuService">Service 2L42 — Leeds → Skipton</h2>
@@ -2630,18 +2630,31 @@ function buildCab333(spec){
   shelf.position.set(0, clusterY + 0.16, clusterZ - 0.06);
   shelf.rotation.x = 0.10;
   g.add(shelf);
-  // A printed schedule card resting on the shelf — gives the cab a "lived-in" feel
+  // A printed schedule card resting on the shelf — gives the cab a "lived-in"
+  // feel. Drawn from the active ROUTE so the card swaps with the map. Up to
+  // 12 stations fit in the three rows of four; longer routes (none yet) get
+  // their tail truncated rather than overflowing the card.
   const schedTex = (() => {
     const c = document.createElement('canvas'); c.width = 512; c.height = 96;
     const ctx = c.getContext('2d');
     ctx.fillStyle = '#f6efd8'; ctx.fillRect(0,0,512,96);
     ctx.strokeStyle = '#7a6d4a'; ctx.lineWidth = 2; ctx.strokeRect(2,2,508,92);
     ctx.fillStyle = '#1a1a1c'; ctx.font = 'bold 16px Roboto Mono'; ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText('2L42  LEEDS → SKIPTON   AIREDALE LINE', 14, 18);
+    const header = `${ROUTE.service}   ${ROUTE.displayName || (ROUTE.name || '').toUpperCase()}`;
+    ctx.fillText(header, 14, 18);
     ctx.font = '13px Roboto Mono';
-    ctx.fillText('LDS 00:00  KLF 08:00  APY 12:00  SHY 17:00', 14, 40);
-    ctx.fillText('SAE 19:00  BIY 23:00  CFL 25:00  KEI 29:00', 14, 58);
-    ctx.fillText('SON 32:00  CEY 35:00  SKI 43:00', 14, 76);
+    const ROW_Y = [40, 58, 76];
+    const PER_ROW = 4, COL_W = 122;
+    for (let i = 0; i < ROUTE.stations.length && i < ROW_Y.length * PER_ROW; i++){
+      // Math.floor used explicitly — `floor` alias is shadowed by the cab's
+      // `const floor = new THREE.Mesh(...)` earlier in this function scope.
+      const row = Math.floor(i / PER_ROW), col = i % PER_ROW;
+      const s = ROUTE.stations[i];
+      const sec = ROUTE.schedule[i] - ROUTE.schedule[0];
+      const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+      const ss = String(sec % 60).padStart(2, '0');
+      ctx.fillText(`${s.code} ${mm}:${ss}`, 14 + col * COL_W, ROW_Y[row]);
+    }
     return new THREE.CanvasTexture(c);
   })();
   const schedCard = new THREE.Mesh(
@@ -4798,8 +4811,12 @@ window.addEventListener('resize', resize);
 resize();
 
 function buildMenuList(){
-  document.getElementById('menuTitle').textContent = ROUTE.displayName || ROUTE.name;
-  document.getElementById('menuService').textContent = ROUTE.subtitle || ROUTE.service;
+  // h1#menuTitle stays as the sim brand ("YORKSHIRE TRAIN SIMULATOR"); the
+  // service h2 carries the active route name + subtitle so the menu still
+  // reads as the current line at a glance.
+  const mapName = ROUTE.displayName || ROUTE.name;
+  const sub = ROUTE.subtitle || ROUTE.service;
+  document.getElementById('menuService').textContent = mapName + ' — ' + sub;
   const el = document.getElementById('stationList');
   el.innerHTML = ROUTE.stations.map((s,i)=>{
     const t = ROUTE.schedule[i] - ROUTE.schedule[0];
@@ -4860,7 +4877,7 @@ function selectTrain(key){
   const trainName = GS.train.name;
   const mapName = (GS.map && GS.map.name) || ROUTE.name;
   document.getElementById('menuSub').textContent = trainName + ' — Driver Simulator';
-  document.title = mapName + ' — ' + trainName + ' Driver Simulator';
+  document.title = 'Yorkshire Train Simulator — ' + mapName + ' · ' + trainName;
 }
 document.querySelectorAll('#unitSelect .unitBtn').forEach(b => {
   b.addEventListener('click', () => selectTrain(b.dataset.train));
@@ -4887,7 +4904,7 @@ function selectMap(key){
   // we have to invalidate the mounted-cab marker manually.
   _builtCabKey = null;
   buildAndAttachCab(GS.train);
-  document.title = ROUTE.name + ' — ' + GS.train.name + ' Driver Simulator';
+  document.title = 'Yorkshire Train Simulator — ' + ROUTE.name + ' · ' + GS.train.name;
 }
 
 document.getElementById('startBtn').addEventListener('click', () => beginService(false));
