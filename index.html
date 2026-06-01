@@ -71,10 +71,10 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 <div id="loading">LOADING — AIREDALE LINE</div>
 
 <div id="menu" style="display:none;">
-  <h1>AIREDALE LINE</h1>
+  <h1 id="menuTitle">AIREDALE LINE</h1>
   <div class="sub" id="menuSub">Class 333 — Driver Simulator</div>
   <div class="panel">
-    <h2>Service 2L42 — Leeds → Skipton</h2>
+    <h2 id="menuService">Service 2L42 — Leeds → Skipton</h2>
     <div class="stations" id="stationList"></div>
     <h2>Cab Controls</h2>
     <div class="keys">
@@ -82,6 +82,8 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
       <b>SPACE</b> Emergency brake &nbsp; <b>H</b> Horn (high) &nbsp; <b>J</b> Horn (low) &nbsp; <b>Q</b> AWS / TPWS reset &nbsp; <b>E</b> DSD reset<br>
       <b>R</b> DRA set / cancel &nbsp; <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
     </div>
+    <h2>Select Map</h2>
+    <div id="mapSelect" style="display:flex;gap:0.6rem;justify-content:center;margin-bottom:1.1rem;flex-wrap:wrap;"></div>
     <h2>Select Unit</h2>
     <div id="unitSelect" style="display:flex;gap:0.6rem;justify-content:center;margin-bottom:1.1rem;flex-wrap:wrap;">
       <button class="unitBtn" data-train="t333" style="flex:1;min-width:140px;max-width:220px;width:auto;padding:0.7rem 0.4rem;font-size:0.78rem;line-height:1.4;">
@@ -140,12 +142,21 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 import * as THREE from 'three';
 
 // ============================================================
-// CONSTANTS — Airedale Line route (Leeds → Skipton)
-// Distances along the line in km from Leeds platform 1.
-// Elevation rises gently up the Aire valley from ~50m to ~120m.
+// MAPS — selectable routes. Each entry is a self-contained
+// ROUTE-shaped object (stations + schedule + limits + features
+// + riverPath + shapePoints) plus menu-display metadata. The
+// active map is exposed as the module-level `ROUTE` reference,
+// reassigned by selectMap() in the menu before the world is
+// rebuilt. New routes only need to declare another MAP_XXX
+// and add it to the MAPS table below.
+// Distances along each line in km from the origin platform 1.
 // ============================================================
-const ROUTE = {
+const MAP_AIREDALE = {
+  key: 'airedale',
   name: 'Airedale Line',
+  displayName: 'AIREDALE LINE',
+  subtitle: 'Leeds → Skipton — 41.8 km · 11 stations',
+  biome: 'countryside',
   service: '2L42 LEEDS → SKIPTON',
   totalKm: 41.8,
   // Stations: km along the line, name, code, platformLen(m), side('L'|'R'|'I'),
@@ -227,7 +238,33 @@ const ROUTE = {
     { km: 34.00, lat:  130 },   // through Cononley
     { km: 41.80, lat:  160 },   // Skipton approach
   ],
+  // Intermediate shape waypoints — pure curve-control points that the trackbed
+  // passes through but which are not stations. Coordinates are approximations
+  // of known curve features along the real Airedale Line (out of Leeds via
+  // Burley Park, Aire valley meanders between Apperley/Shipley, Bingley/Cross-
+  // flatts, and Steeton/Cononley/Skipton). These break up the longer station-
+  // to-station stretches so the line genuinely follows the Aire valley rather
+  // than smooth-straight-shotting between stations. Refine with OSM way data
+  // if available.
+  shapePoints: [
+    { km:  2.20, lat: 53.8055, lon: -1.5555 },   // Holbeck/Burley Park — line bends N→NW out of Leeds
+    { km:  4.50, lat: 53.8190, lon: -1.5850 },   // Headingley/Kirkstall approach
+    { km:  8.50, lat: 53.8358, lon: -1.6580 },   // Calverley/Rodley — Aire valley
+    { km: 12.50, lat: 53.8362, lon: -1.7370 },   // Apperley → Shipley meander
+    { km: 17.50, lat: 53.8438, lon: -1.8125 },   // Saltaire → Bingley along Aire
+    { km: 23.00, lat: 53.8588, lon: -1.8780 },   // Crossflatts → Keighley
+    { km: 27.00, lat: 53.8810, lon: -1.9270 },   // Keighley → Steeton, post-tunnel valley
+    { km: 30.50, lat: 53.9105, lon: -1.9620 },   // Steeton → Cononley
+    { km: 35.00, lat: 53.9430, lon: -1.9925 },   // Cononley → Skipton — broad valley
+    { km: 38.50, lat: 53.9525, lon: -2.0060 },   // Skipton approach
+  ],
 };
+
+const MAPS = {
+  airedale: MAP_AIREDALE,
+};
+// Active map; reassigned by selectMap() before world rebuild.
+let ROUTE = MAPS.airedale;
 
 // ============================================================
 // ROLLING-STOCK SPECS — TRAINS map (each entry is a fully self-contained
@@ -346,36 +383,19 @@ function _projectLatLon(lat, lon){
   const sinB = Math.sin(ROUTE_BEARING), cosB = Math.cos(ROUTE_BEARING);
   return { X: east * sinB + north * cosB, Z: east * cosB - north * sinB };
 }
-ROUTE.stations.forEach(s => { const p = _projectLatLon(s.lat, s.lon); s.X = p.X; s.Z = p.Z; });
 const TRACK_GAUGE_OFFSET = 4.0;         // metres between centrelines (UK double track)
-
-// Intermediate shape waypoints — pure curve-control points that the trackbed
-// passes through but which are not stations. Coordinates are approximations of
-// known curve features along the real Airedale Line (out of Leeds via Burley
-// Park, Aire valley meanders between Apperley/Shipley, Bingley/Crossflatts,
-// and Steeton/Cononley/Skipton). These break up the longer station-to-station
-// stretches so the line genuinely follows the Aire valley rather than smooth-
-// straight-shotting between stations. Refine with OSM way data if available.
-ROUTE.shapePoints = [
-  { km:  2.20, lat: 53.8055, lon: -1.5555 },   // Holbeck/Burley Park — line bends N→NW out of Leeds
-  { km:  4.50, lat: 53.8190, lon: -1.5850 },   // Headingley/Kirkstall approach
-  { km:  8.50, lat: 53.8358, lon: -1.6580 },   // Calverley/Rodley — Aire valley
-  { km: 12.50, lat: 53.8362, lon: -1.7370 },   // Apperley → Shipley meander
-  { km: 17.50, lat: 53.8438, lon: -1.8125 },   // Saltaire → Bingley along Aire
-  { km: 23.00, lat: 53.8588, lon: -1.8780 },   // Crossflatts → Keighley
-  { km: 27.00, lat: 53.8810, lon: -1.9270 },   // Keighley → Steeton, post-tunnel valley
-  { km: 30.50, lat: 53.9105, lon: -1.9620 },   // Steeton → Cononley
-  { km: 35.00, lat: 53.9430, lon: -1.9925 },   // Cononley → Skipton — broad valley
-  { km: 38.50, lat: 53.9525, lon: -2.0060 },   // Skipton approach
-];
 
 // Combined route points (stations + shape) for curve interpolation. The
 // existing trackPoint logic just needs (km, X, Z, elev) per control point —
 // shape points get an interpolated elevation between bracketing stations.
-const routePts = (function buildRoutePts(){
+// Rebuilt by initRouteProjection() whenever the active ROUTE changes, so the
+// track centreline always reflects the currently-selected map.
+let routePts = [];
+function initRouteProjection(){
+  ROUTE.stations.forEach(s => { const p = _projectLatLon(s.lat, s.lon); s.X = p.X; s.Z = p.Z; });
   const stns = ROUTE.stations;
   const out = stns.map(s => ({ km: s.km, X: s.X, Z: s.Z, elev: s.elev }));
-  for (const sp of ROUTE.shapePoints){
+  for (const sp of (ROUTE.shapePoints || [])){
     const p = _projectLatLon(sp.lat, sp.lon);
     let i = 0;
     while (i < stns.length - 1 && stns[i+1].km <= sp.km) i++;
@@ -407,8 +427,9 @@ const routePts = (function buildRoutePts(){
     Z: last.Z + (last.Z - penult.Z),
     elev: last.elev + (last.elev - penult.elev),
   });
-  return out;
-})();
+  routePts = out;
+}
+initRouteProjection();
 
 function _catmullRom(p0, p1, p2, p3, t){
   const t2 = t*t, t3 = t2*t;
@@ -783,7 +804,6 @@ function buildTerrain(){
   group.add(new THREE.Mesh(g, m));
   return group;
 }
-scene.add(buildTerrain());
 
 // ============================================================
 // RIVER AIRE — flat blue ribbon following the valley
@@ -861,7 +881,6 @@ function buildRiver(){
   group.add(mesh);
   return group;
 }
-scene.add(buildRiver());
 
 // ============================================================
 // TRACK — ballast + sleepers + rails, swept along centreline
@@ -978,7 +997,6 @@ function buildTrack(){
 
   return group;
 }
-scene.add(buildTrack());
 
 // ============================================================
 // OHLE — overhead line equipment (poles + contact wire)
@@ -1048,7 +1066,6 @@ function buildOHLE(){
 
   return group;
 }
-scene.add(buildOHLE());
 
 // ============================================================
 // STATIONS — platforms + canopies + name boards
@@ -1269,7 +1286,6 @@ function buildStations(){
   }
   return group;
 }
-scene.add(buildStations());
 
 // ============================================================
 // SIGNALS — colour-light heads at sensible spacing
@@ -1317,7 +1333,6 @@ function buildSignals(){
   }
   return group;
 }
-scene.add(buildSignals());
 
 function setSignalAspect(s, aspect){
   s.aspect = aspect;
@@ -1432,7 +1447,6 @@ function buildScatter(){
 
   return group;
 }
-scene.add(buildScatter());
 
 // ============================================================
 // LANDMARKS — Salts Mill, viaducts, tunnels
@@ -1623,7 +1637,38 @@ function buildLandmarks(){
   }
   return group;
 }
-scene.add(buildLandmarks());
+// ============================================================
+// WORLD ASSEMBLY — collects every map-dependent scene mesh in
+// `_worldMeshes` so selectMap() can tear them down and rebuild
+// against the newly-active ROUTE. Sky stays scene-level since
+// it is map-independent.
+// ============================================================
+let _worldMeshes = [];
+function _addWorld(mesh){ _worldMeshes.push(mesh); scene.add(mesh); }
+function clearWorld(){
+  for (const m of _worldMeshes){
+    scene.remove(m);
+    m.traverse?.(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material){
+        if (Array.isArray(obj.material)) obj.material.forEach(mat => mat.dispose());
+        else obj.material.dispose();
+      }
+    });
+  }
+  _worldMeshes = [];
+}
+function buildWorld(){
+  clearWorld();
+  _addWorld(buildTerrain());
+  _addWorld(buildRiver());
+  _addWorld(buildTrack());
+  _addWorld(buildOHLE());
+  _addWorld(buildStations());
+  _addWorld(buildSignals());
+  _addWorld(buildScatter());
+  _addWorld(buildLandmarks());
+}
 
 // ============================================================
 // CAB — driver's cab geometry, anchored to camera rig
@@ -4053,6 +4098,7 @@ const GS = {
   demo: false,               // autopilot drives the train when true
   timeScale: 1.0,            // sim-time multiplier (1× normal, 2× when '2× speed' checkbox is on)
   train: TRAINS.t333,        // active rolling-stock spec (swapped by menu before beginService)
+  map: MAPS.airedale,        // active route spec (swapped by menu before beginService)
 };
 const DEMO_DECEL = 0.55;       // m/s², autopilot brake target — well under maxBrake
 
@@ -4679,11 +4725,31 @@ window.addEventListener('resize', resize);
 resize();
 
 function buildMenuList(){
+  document.getElementById('menuTitle').textContent = ROUTE.displayName || ROUTE.name;
+  document.getElementById('menuService').textContent = ROUTE.subtitle || ROUTE.service;
   const el = document.getElementById('stationList');
   el.innerHTML = ROUTE.stations.map((s,i)=>{
     const t = ROUTE.schedule[i] - ROUTE.schedule[0];
     return `<div class="row"><div>${s.name} <span style="color:#7090a8">(${s.code})</span></div><div class="km">${s.km.toFixed(2)} km · ${fmtTime(t)}</div></div>`;
   }).join('');
+}
+
+// Map selector buttons are rendered from MAPS so adding a route in phase 2
+// only needs a new MAPS entry — no HTML to touch. Mirrors the unit selector's
+// .unitBtn styling so the panel reads consistently.
+function buildMapList(){
+  const el = document.getElementById('mapSelect');
+  el.innerHTML = Object.values(MAPS).map(m => {
+    const cars = m.stations.length;
+    const km = m.totalKm.toFixed(1);
+    const biome = (m.biome || '').toUpperCase();
+    return `<button class="unitBtn" data-map="${m.key}" style="flex:1;min-width:140px;max-width:260px;width:auto;padding:0.7rem 0.4rem;font-size:0.78rem;line-height:1.4;">`
+         + `${m.displayName || m.name}<br><span style="font-size:0.62rem;color:rgba(180,210,235,0.55);letter-spacing:0.2em;">${biome} · ${cars} STN · ${km} KM</span>`
+         + `</button>`;
+  }).join('');
+  el.querySelectorAll('.unitBtn').forEach(b => {
+    b.addEventListener('click', () => selectMap(b.dataset.map));
+  });
 }
 
 function beginService(demo){
@@ -4718,14 +4784,38 @@ function selectTrain(key){
   document.querySelectorAll('#unitSelect .unitBtn').forEach(b => {
     b.classList.toggle('selected', b.dataset.train === key);
   });
-  const name = GS.train.name;
-  document.getElementById('menuSub').textContent = name + ' — Driver Simulator';
-  document.title = 'Airedale Line — ' + name + ' Driver Simulator';
+  const trainName = GS.train.name;
+  const mapName = (GS.map && GS.map.name) || ROUTE.name;
+  document.getElementById('menuSub').textContent = trainName + ' — Driver Simulator';
+  document.title = mapName + ' — ' + trainName + ' Driver Simulator';
 }
 document.querySelectorAll('#unitSelect .unitBtn').forEach(b => {
   b.addEventListener('click', () => selectTrain(b.dataset.train));
 });
 selectTrain(GS.train.key);   // initialise selected-state styling on page load
+
+// Map selector — clicking a map button swaps the active ROUTE, reprojects
+// the centreline and rebuilds every map-dependent scene mesh against the new
+// route. Cab is force-rebuilt so the schedule card / stop markers track the
+// new route. Same-key clicks are a no-op so the user can mash buttons safely.
+function selectMap(key){
+  if (!MAPS[key]) return;
+  document.querySelectorAll('#mapSelect .unitBtn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.map === key);
+  });
+  if (GS.map && GS.map.key === key) return;
+  ROUTE = MAPS[key];
+  GS.map = MAPS[key];
+  initRouteProjection();
+  buildWorld();
+  buildMenuList();
+  // Force cab rebuild so the printed schedule card and stop markers reflect
+  // the new route. buildAndAttachCab early-returns on identical train key, so
+  // we have to invalidate the mounted-cab marker manually.
+  _builtCabKey = null;
+  buildAndAttachCab(GS.train);
+  document.title = ROUTE.name + ' — ' + GS.train.name + ' Driver Simulator';
+}
 
 document.getElementById('startBtn').addEventListener('click', () => beginService(false));
 document.getElementById('demoBtn').addEventListener('click', () => beginService(true));
@@ -4743,10 +4833,20 @@ function togglePause(){
   document.getElementById('pause').style.display = GS.paused ? 'flex' : 'none';
 }
 
-// Expose module-scope state for browser-console debugging.
-window.SIM = { GS, ROUTE, TRAINS, T333, scene, camera, renderer, get cab(){return cab;}, placeCamera, updateCabAnim, updateHUD, trackPoint, routePts, riverLatAt, demoAutopilot, demoTargetSpeed, physicsStep, updateStations, buildAndAttachCab, selectTrain, get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;}, get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
+// Expose module-scope state for browser-console debugging. ROUTE is a let,
+// so we wrap it in a getter — otherwise window.SIM.ROUTE would freeze to
+// whatever the active map was at script-load and never reflect selectMap().
+window.SIM = { GS, TRAINS, MAPS, T333, scene, camera, renderer,
+  get ROUTE(){return ROUTE;}, get routePts(){return routePts;}, get cab(){return cab;},
+  placeCamera, updateCabAnim, updateHUD, trackPoint, riverLatAt, demoAutopilot, demoTargetSpeed,
+  physicsStep, updateStations, buildAndAttachCab, buildWorld, selectTrain, selectMap,
+  get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;},
+  get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
 
 // Boot
+buildWorld();          // initial world from MAPS.airedale (the default ROUTE)
+buildMapList();        // render one button per MAPS entry
+selectMap(GS.map.key); // seed selected-state styling; same-key no-op skips rebuild
 buildMenuList();
 // Build the default-unit cab now — GS is declared above, so reading GS.train
 // here is safe. Doing it before the render loop starts ensures cabGroup is

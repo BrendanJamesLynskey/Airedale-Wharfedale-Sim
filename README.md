@@ -134,9 +134,31 @@ The menu's **DEMO RUN ×2** button starts an autopilot that drives the route end
 - Route geometry follows the real Airedale Line — station GPS positions plus ~10 intermediate shape points are projected (equirectangular, rotated to the mean Leeds→Skipton bearing) and interpolated with Catmull-Rom curves. Shape-point coordinates are educated approximations of the Aire valley meander; refine with OSM way data for higher fidelity. Gradient profile and lineside features remain stylised.
 - The river Aire is rendered as a meandering blue ribbon parametrised by lateral offset from the track. The line crosses the Aire only once on the real Airedale route — at Apperley Bridge — and the river stays on the south side from there through Saltaire, Bingley, Crossflatts, Keighley, Steeton, Cononley to Skipton (Salts Mill sits between line and river at Saltaire). The water surface samples the same undulation function as the terrain so it sits at local grade rather than a fixed Y.
 
+## Maps
+
+The menu has a **Select Map** panel that lists every route defined in the
+in-memory `MAPS` table. Picking a map swaps the active `ROUTE`, reprojects
+the track centreline against the new lat/lon waypoints, tears down the
+previous world meshes (terrain, river, track, OHLE, stations, signals,
+scatter, landmarks) and rebuilds them against the new route. The cab's
+printed schedule card and any "N CAR" stop markers repaint with the new
+station list.
+
+Currently shipped maps:
+
+| Map | Biome | Stations | Length |
+|-----|-------|----------|--------|
+| **Airedale Line** | Countryside | 11 | 41.8 km |
+
+Adding a route is a single `MAP_XXX` literal + an entry in `MAPS` — the
+menu picks it up automatically and the world rebuild path is shared.
+
 ## Roadmap
 
-- v2: Wharfedale branch (Shipley → Ilkley) selectable from the menu
+- v2: Wharfedale branch (Shipley → Ilkley) — another `MAPS` entry
+- Contrasting biomes: a coastal line (e.g. St Ives Bay) and an upland
+  line (e.g. a Settle–Carlisle slice) to exercise the biome system
+- User-built maps with a form-based editor and localStorage persistence
 - Additional rolling stock: Class 195 (DMU)
 - Real audio recordings (CC-BY) replacing synthesised audio
 - Day / night / weather presets
