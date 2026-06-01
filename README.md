@@ -1,9 +1,10 @@
 # Airedale & Wharfedale Line — Driver Simulator
 
 A browser-based train driver simulator for the Airedale and Wharfedale lines
-in West Yorkshire, England. v1 covers the full **Leeds → Skipton** Airedale
-service (11 stations, 41.8 km), with selectable **Class 333** or **Class 331/0**
-EMUs.
+in West Yorkshire, England. The menu picks the route — the full **Leeds →
+Skipton** Airedale service (11 stations, 41.8 km) or the **Shipley → Ilkley**
+Wharfedale branch (7 stations, 17.0 km) — and the unit, either **Class 333**
+or **Class 331/0**.
 
 [Play it here](https://brendanjameslynskey.github.io/Airedale-Wharfedale-Sim/)
 
@@ -146,18 +147,26 @@ station list.
 
 Currently shipped maps:
 
-| Map | Biome | Stations | Length |
-|-----|-------|----------|--------|
-| **Airedale Line** | Countryside | 11 | 41.8 km |
+| Map | Biome | Stations | Length | Service |
+|-----|-------|----------|--------|---------|
+| **Airedale Line** | Countryside | 11 | 41.8 km | 2L42 Leeds → Skipton |
+| **Wharfedale Line** | Moorland | 7 | 17.0 km | 2L72 Shipley → Ilkley |
+
+The Wharfedale branch climbs out of the Aire valley via Shipley Curve,
+traverses the moorland edge to Guiseley and Menston, then descends into
+the Wharfe valley through Burley-in-Wharfedale, Ben Rhydding and Ilkley.
+The River Wharfe joins the line at Burley and runs alongside it on the
+north side through to Ilkley. The line is 25 kV AC electrified so the
+same Class 333 / 331 stock applies.
 
 Adding a route is a single `MAP_XXX` literal + an entry in `MAPS` — the
 menu picks it up automatically and the world rebuild path is shared.
 
 ## Roadmap
 
-- v2: Wharfedale branch (Shipley → Ilkley) — another `MAPS` entry
 - Contrasting biomes: a coastal line (e.g. St Ives Bay) and an upland
   line (e.g. a Settle–Carlisle slice) to exercise the biome system
+  beyond the current countryside/moorland pair
 - User-built maps with a form-based editor and localStorage persistence
 - Additional rolling stock: Class 195 (DMU)
 - Real audio recordings (CC-BY) replacing synthesised audio

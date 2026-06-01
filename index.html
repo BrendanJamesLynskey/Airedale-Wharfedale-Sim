@@ -260,8 +260,81 @@ const MAP_AIREDALE = {
   ],
 };
 
+// Wharfedale Line — Shipley → Ilkley branch. 7 stations, ~17 km. Climbs
+// out of the Aire valley via Shipley Curve, traverses the moorland edge
+// past Baildon to Guiseley/Menston, then descends into the Wharfe valley
+// through Burley-in-Wharfedale, Ben Rhydding and Ilkley. The line is
+// electrified at 25 kV AC so the same OHLE and Class 333 / 331 stock
+// applies. Coordinates are approximations of real station positions;
+// refine with OSM way data for higher fidelity.
+const MAP_WHARFEDALE = {
+  key: 'wharfedale',
+  name: 'Wharfedale Line',
+  displayName: 'WHARFEDALE LINE',
+  subtitle: 'Shipley → Ilkley — 17.0 km · 7 stations',
+  biome: 'moorland',
+  service: '2L72 SHIPLEY → ILKLEY',
+  totalKm: 17.0,
+  stations: [
+    { km:  0.00, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev:  80, plat_no: 5, lat: 53.8348, lon: -1.7706 },
+    { km:  2.40, name: 'Baildon',              code: 'BLD', plat:  85, side: 'L', elev: 130,             lat: 53.8526, lon: -1.7670 },
+    { km:  7.10, name: 'Guiseley',             code: 'GSY', plat: 100, side: 'I', elev: 130,             lat: 53.8770, lon: -1.7160 },
+    { km:  9.50, name: 'Menston',              code: 'MNN', plat:  85, side: 'L', elev: 140,             lat: 53.8893, lon: -1.7400 },
+    { km: 12.40, name: 'Burley-in-Wharfedale', code: 'BUW', plat:  85, side: 'L', elev: 120,             lat: 53.9075, lon: -1.7560 },
+    { km: 15.00, name: 'Ben Rhydding',         code: 'BEY', plat:  90, side: 'L', elev:  95,             lat: 53.9180, lon: -1.7985 },
+    { km: 17.00, name: 'Ilkley',               code: 'ILK', plat: 175, side: 'I', elev:  85,             lat: 53.9266, lon: -1.8211 },
+  ],
+  // Schedule (cumulative seconds from departure Shipley) — ~22 min stopper.
+  schedule: [0, 240, 540, 720, 900, 1080, 1320],
+  // Speed limit segments — rural branch with town slacks.
+  limits: [
+    { km:  0.00, mph: 25 },   // Shipley junction
+    { km:  0.50, mph: 40 },   // Shipley curve climbing
+    { km:  2.20, mph: 30 },   // Baildon
+    { km:  2.60, mph: 60 },
+    { km:  7.00, mph: 30 },   // Guiseley
+    { km:  7.30, mph: 70 },   // line speed
+    { km: 12.30, mph: 30 },   // Burley-in-Wharfedale
+    { km: 12.60, mph: 50 },
+    { km: 14.90, mph: 30 },   // Ben Rhydding
+    { km: 15.20, mph: 40 },
+    { km: 16.60, mph: 25 },   // Ilkley terminus approach
+  ],
+  // No major engineering features. The Wharfedale branch is a stylised
+  // rural route — Shipley Curve handles the climb out of the Aire valley
+  // via shapePoints, not via discrete bridges or tunnels.
+  features: [],
+  // River Wharfe — runs parallel to the line from Burley-in-Wharfedale
+  // northwest through Ilkley, on the north side of the trackbed. South of
+  // Burley the line sits on the Aire/Wharfe watershed plateau with no
+  // significant river alongside, so the riverPath drives the river well
+  // out of view there (large negative lat = far north of the line).
+  riverPath: [
+    { km:  0.00, lat: -500 },   // no river alongside leaving Shipley
+    { km: 10.00, lat: -300 },
+    { km: 11.50, lat: -180 },   // entering Wharfe valley
+    { km: 13.00, lat: -120 },
+    { km: 15.00, lat:  -80 },   // Wharfe alongside through Ben Rhydding
+    { km: 17.00, lat:  -80 },   // alongside at Ilkley
+  ],
+  // Shape waypoints — give Shipley Curve its kink and the Wharfe-valley
+  // descent its sweep, so the trackbed doesn't read as a straight line
+  // between sparse station positions.
+  shapePoints: [
+    { km:  0.50, lat: 53.8400, lon: -1.7700 },   // Shipley Curve — sharp bend N out of station
+    { km:  2.50, lat: 53.8600, lon: -1.7600 },   // post-Baildon, heading NE
+    { km:  5.00, lat: 53.8720, lon: -1.7450 },   // through Hawksworth gap
+    { km:  7.50, lat: 53.8820, lon: -1.7100 },   // Guiseley/Menston gap
+    { km:  9.00, lat: 53.8850, lon: -1.7300 },   // between Guiseley and Menston
+    { km: 11.00, lat: 53.8980, lon: -1.7480 },   // between Menston and Burley
+    { km: 13.50, lat: 53.9120, lon: -1.7700 },   // Wharfe valley entry
+    { km: 15.50, lat: 53.9200, lon: -1.8100 },   // between Ben Rhydding and Ilkley
+  ],
+};
+
 const MAPS = {
   airedale: MAP_AIREDALE,
+  wharfedale: MAP_WHARFEDALE,
 };
 // Active map; reassigned by selectMap() before world rebuild.
 let ROUTE = MAPS.airedale;
