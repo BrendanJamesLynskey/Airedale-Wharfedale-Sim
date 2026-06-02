@@ -193,6 +193,15 @@ Mumbling, Wetwang Cross, Pity-Me Terminus), 26 km, 3 river crossings,
 2 tunnels (Crackpot, Mumbledon), 2 viaducts (Snoring, Wetwang) and a
 mill. Use it as a template when writing your own.
 
+### Graphical editor
+
+The [**Yorkshire Line Editor**](https://brendanjameslynskey.github.io/Yorkshire-Line-Editor/)
+([repo](https://github.com/BrendanJamesLynskey/Yorkshire-Line-Editor))
+is a companion 2D plan-view editor: drag stations, scenery features,
+river points and speed limits onto a canvas; export downloads a JSON
+file shaped exactly like the schema below. It's the easier way to
+build a line if you'd rather not hand-author the JSON.
+
 ### Map JSON schema
 
 The file is a single JSON object with the same shape as a `MAPS`
