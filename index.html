@@ -436,6 +436,16 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 function smoothstep(a,b,x){const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}
 function fmtTime(s){s=floor(s);const m=floor(s/60),ss=s%60;return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');}
+// Cab-display helpers — derive the headcode (first token of ROUTE.service)
+// and start/end station codes so the TMS panels, DMI strip and GSM-R LCD all
+// track the active route instead of carrying the Airedale defaults.
+function routeHeadcode(){ return ((ROUTE && ROUTE.service) || '').split(/\s+/)[0] || ''; }
+function routeEndcodes(sep){
+  const stns = (ROUTE && ROUTE.stations) || [];
+  const first = stns[0] && stns[0].code || '';
+  const last = stns[stns.length-1] && stns[stns.length-1].code || '';
+  return first + sep + last;
+}
 
 // ============================================================
 // TRACK CENTRELINE (km → world XYZ)
@@ -1160,9 +1170,21 @@ function makeNameBoardTexture(name, code){
   ctx.fillStyle = '#003a6e'; ctx.fillRect(0,0,1024,40);
   ctx.fillStyle = '#003a6e'; ctx.fillRect(0,216,1024,40);
   ctx.fillStyle = '#1a1a1a';
-  ctx.font = 'bold 110px Roboto Mono, monospace';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
+  // Shrink the name font to fit the board's printable width if the default
+  // 110 px monospace would overflow. Long custom station names like
+  // "Bumblethorpe Central" or "Pratt's Bottom Halt" otherwise spill past the
+  // sign edges and clip — the board itself is a fixed 4 m × 1 m plane and
+  // the texture is letter-boxed at a 4:1 ratio.
+  const MAX_W = 960;     // 1024 px canvas minus a small margin
+  let nameSize = 110;
+  ctx.font = `bold ${nameSize}px Roboto Mono, monospace`;
+  const measured = ctx.measureText(name).width;
+  if (measured > MAX_W){
+    nameSize = max(48, floor(nameSize * MAX_W / measured));
+    ctx.font = `bold ${nameSize}px Roboto Mono, monospace`;
+  }
   ctx.fillText(name, 512, 132);
   ctx.fillStyle = '#003a6e';
   ctx.font = 'bold 40px Roboto Mono, monospace';
@@ -2335,7 +2357,7 @@ function buildCab333(spec){
     ctx.font = 'bold 28px Roboto Mono, monospace'; ctx.fillStyle = '#7cf08a'; ctx.textAlign='left';
     ctx.fillText(spec.tmsLabel, 32, 50);
     ctx.font = '20px Roboto Mono'; ctx.fillStyle = '#5acd6e';
-    ctx.fillText('SERVICE  2L42  LDS → SKI', 32, 96);
+    ctx.fillText(`SERVICE  ${routeHeadcode()}  ${routeEndcodes(' → ')}`, 32, 96);
     ctx.fillText('NEXT     ----', 32, 134);
     ctx.fillText('SPEED    ----', 32, 168);
     ctx.fillText('LIMIT    ----', 32, 202);
@@ -2517,7 +2539,7 @@ function buildCab333(spec){
     // LCD screen
     ctx.fillStyle = '#0a1410'; ctx.fillRect(20,60,472,90);
     ctx.fillStyle = '#9cff9c'; ctx.font = 'bold 22px Roboto Mono, monospace';
-    ctx.fillText('2L42  LDS-SKI', 36, 90);
+    ctx.fillText(`${routeHeadcode()}  ${routeEndcodes('-')}`, 36, 90);
     ctx.fillStyle = '#5acd6e'; ctx.font = '16px Roboto Mono';
     ctx.fillText('SIGNALLER  CONTACT', 36, 118);
     ctx.fillText('RDY', 420, 118);
@@ -3202,7 +3224,7 @@ function buildCab331(spec){
     ctx.font = 'bold 28px Roboto Mono, monospace'; ctx.fillStyle = '#7cf08a'; ctx.textAlign='left';
     ctx.fillText(spec.tmsLabel, 24, 44);
     ctx.font = '20px Roboto Mono'; ctx.fillStyle = '#5acd6e';
-    ctx.fillText('SERVICE  2L42  LDS → SKI', 24, 84);
+    ctx.fillText(`SERVICE  ${routeHeadcode()}  ${routeEndcodes(' → ')}`, 24, 84);
     ctx.fillText('UNIT     ' + spec.cars + '-CAR  ' + spec.lengthM.toFixed(0) + 'M', 24, 116);
     ctx.fillText('BRAKE TEST     OK', 24, 154);
     ctx.fillText('DOORS          CLOSED', 24, 184);
@@ -3235,7 +3257,7 @@ function buildCab331(spec){
     ctx.fillText('CLASS 331/0  DMI', 18, 28);
     ctx.fillStyle = '#cfe6f7'; ctx.font = 'bold 22px Roboto Mono, monospace';
     ctx.textAlign = 'right';
-    ctx.fillText('2L42  LDS → SKI', W - 18, 28);
+    ctx.fillText(`${routeHeadcode()}  ${routeEndcodes(' → ')}`, W - 18, 28);
 
     // Big speed digits in the centre-left
     const spd = Math.round(mph);
@@ -3695,7 +3717,7 @@ function buildCab331(spec){
     ctx.fillText('GSM-R   CAB RADIO', 36, 35);
     ctx.fillStyle = '#0a1410'; ctx.fillRect(20,60,472,90);
     ctx.fillStyle = '#9cff9c'; ctx.font = 'bold 22px Roboto Mono, monospace';
-    ctx.fillText('2L42  LDS-SKI', 36, 90);
+    ctx.fillText(`${routeHeadcode()}  ${routeEndcodes('-')}`, 36, 90);
     ctx.fillStyle = '#5acd6e'; ctx.font = '16px Roboto Mono';
     ctx.fillText('SIGNALLER  CONTACT', 36, 118);
     ctx.fillText('RDY', 420, 118);
@@ -4736,7 +4758,7 @@ function endOfRoute(){
       if (!GS._endShown){
         GS._endShown = true;
         const final = floor(GS.score);
-        showMsg(`SERVICE COMPLETE — SKIPTON. FINAL SCORE: ${final}`, '', 8.0);
+        showMsg(`SERVICE COMPLETE — ${last.name.toUpperCase()}. FINAL SCORE: ${final}`, '', 8.0);
       }
     }
   }
