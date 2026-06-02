@@ -26,6 +26,9 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 #menu .unitBtn.selected{background:linear-gradient(180deg,rgba(92,200,255,0.42),rgba(92,200,255,0.18));border-color:#9ccfff;color:#fff;box-shadow:0 0 24px rgba(92,200,255,0.35);}
 #menu .credits{margin-top:1.4rem;font-size:0.62rem;color:rgba(180,210,235,0.35);text-align:center;line-height:1.7;letter-spacing:0.05em;}
 #menu .credits a{color:rgba(180,210,235,0.55);text-decoration:none;}
+#menu .loadBtn{background:transparent;border:1px dashed rgba(92,200,255,0.32);color:rgba(180,210,235,0.7);font-family:'Roboto Mono',monospace;font-size:0.68rem;padding:0.4rem 0.95rem;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;transition:all 0.2s;width:auto;max-width:none;display:inline-block;margin:0;font-weight:400;}
+#menu .loadBtn:hover{color:#cfe6f7;border-color:rgba(92,200,255,0.6);box-shadow:0 0 16px rgba(92,200,255,0.18);background:transparent;}
+#menu #mapLoadMsg{font-size:0.66rem;color:rgba(180,210,235,0.5);text-align:center;min-height:1.1em;margin-bottom:0.7rem;letter-spacing:0.08em;font-family:'Roboto Mono',monospace;}
 
 #hud{position:fixed;inset:0;pointer-events:none;z-index:30;display:none;font-family:'Roboto Mono',monospace;}
 #topbar{position:absolute;top:0;left:0;right:0;background:linear-gradient(180deg,rgba(0,0,0,0.65),rgba(0,0,0,0));padding:0.5rem 0.8rem;display:flex;justify-content:space-between;font-size:0.78rem;color:#cfe6f7;pointer-events:none;}
@@ -83,7 +86,13 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
       <b>R</b> DRA set / cancel &nbsp; <b>L</b> Headlights &nbsp; <b>V</b> Wipers &nbsp; <b>P</b>/<b>Esc</b> Pause &nbsp; <b>F</b> Look around (drag to pan)
     </div>
     <h2>Select Map</h2>
-    <div id="mapSelect" style="display:flex;gap:0.6rem;justify-content:center;margin-bottom:1.1rem;flex-wrap:wrap;"></div>
+    <div id="mapSelect" style="display:flex;gap:0.6rem;justify-content:center;margin-bottom:0.7rem;flex-wrap:wrap;"></div>
+    <div id="mapLoad" style="display:flex;gap:0.6rem;justify-content:center;margin-bottom:0.5rem;flex-wrap:wrap;">
+      <label class="loadBtn" for="mapFile">LOAD FROM FILE…</label>
+      <input type="file" id="mapFile" accept=".json,application/json" style="display:none;">
+      <button class="loadBtn" id="mapUrlBtn" type="button">LOAD FROM URL…</button>
+    </div>
+    <div id="mapLoadMsg"></div>
     <h2>Select Unit</h2>
     <div id="unitSelect" style="display:flex;gap:0.6rem;justify-content:center;margin-bottom:1.1rem;flex-wrap:wrap;">
       <button class="unitBtn" data-train="t333" style="flex:1;min-width:140px;max-width:220px;width:auto;padding:0.7rem 0.4rem;font-size:0.78rem;line-height:1.4;">
@@ -4907,6 +4916,100 @@ function selectMap(key){
   document.title = 'Yorkshire Train Simulator — ' + ROUTE.name + ' · ' + GS.train.name;
 }
 
+// ============================================================
+// CUSTOM MAP LOADER — accept a JSON file or URL describing a
+// MAPS-shaped route. Validation is intentionally permissive on
+// optional fields (features / riverPath / shapePoints all default
+// to empty) but strict on the structural essentials (key, name,
+// totalKm, stations, schedule, limits) since the world builders
+// will crash on a missing station list. Loaded maps install into
+// the live MAPS table and the picker auto-refreshes, so the rest
+// of the swap pipeline (selectMap → initRouteProjection →
+// buildWorld → cab rebuild) is shared with the bundled maps.
+// ============================================================
+function installLoadedMap(json, sourceLabel){
+  const errors = [];
+  const need = (cond, msg) => { if (!cond) errors.push(msg); };
+  need(json && typeof json === 'object' && !Array.isArray(json), 'root must be an object');
+  if (json && typeof json === 'object'){
+    need(typeof json.key === 'string' && json.key.length > 0, 'missing string "key"');
+    need(typeof json.name === 'string' && json.name.length > 0, 'missing string "name"');
+    need(typeof json.totalKm === 'number' && json.totalKm > 0, 'missing or non-positive "totalKm"');
+    need(Array.isArray(json.stations) && json.stations.length >= 2, '"stations" must be an array of at least 2');
+    if (Array.isArray(json.stations)){
+      need(Array.isArray(json.schedule) && json.schedule.length === json.stations.length, '"schedule" length must match "stations"');
+      need(Array.isArray(json.limits) && json.limits.length >= 1, '"limits" must have at least 1 entry');
+      const required = ['km','name','code','plat','side','elev','lat','lon'];
+      for (let i = 0; i < json.stations.length; i++){
+        const s = json.stations[i];
+        if (!s || typeof s !== 'object'){ errors.push(`stations[${i}] not an object`); continue; }
+        for (const f of required){
+          if (s[f] === undefined) errors.push(`stations[${i}] missing "${f}"`);
+        }
+      }
+    }
+  }
+  if (errors.length){
+    const sample = errors.slice(0, 3).join('; ');
+    return { ok: false, error: sample + (errors.length > 3 ? ` (+${errors.length-3} more)` : '') };
+  }
+  // Fill optional fields so the world builders never see undefined.
+  json.features = json.features || [];
+  json.riverPath = json.riverPath || [];
+  json.shapePoints = json.shapePoints || [];
+  json.displayName = json.displayName || json.name.toUpperCase();
+  json.subtitle = json.subtitle || (json.stations[0].name + ' → ' + json.stations[json.stations.length-1].name
+    + ' — ' + json.totalKm.toFixed(1) + ' km · ' + json.stations.length + ' stations');
+  json.biome = json.biome || 'countryside';
+  json.service = json.service || ('LOADED ' + json.stations[0].code + ' → ' + json.stations[json.stations.length-1].code);
+  const replacing = !!MAPS[json.key];
+  MAPS[json.key] = json;
+  buildMapList();
+  selectMap(json.key);
+  showMapLoadMsg((replacing ? 'Replaced ' : 'Loaded ') + json.displayName + (sourceLabel ? ' from ' + sourceLabel : ''), 'ok');
+  return { ok: true };
+}
+
+function showMapLoadMsg(text, cls){
+  const el = document.getElementById('mapLoadMsg');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = cls === 'err' ? '#ff8a72'
+                  : cls === 'ok'  ? '#9cff9c'
+                                  : 'rgba(180,210,235,0.5)';
+}
+
+document.getElementById('mapFile').addEventListener('change', async ev => {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  showMapLoadMsg('Reading ' + file.name + '…');
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    const r = installLoadedMap(json, file.name);
+    if (!r.ok) showMapLoadMsg('Load failed: ' + r.error, 'err');
+  } catch (e){
+    showMapLoadMsg('Parse failed: ' + e.message, 'err');
+  }
+  ev.target.value = '';   // allow re-selecting the same file later
+});
+
+document.getElementById('mapUrlBtn').addEventListener('click', async () => {
+  // Pre-fill with the bundled sample so hitting Enter just loads it.
+  const url = window.prompt('Map JSON URL:', 'sample-line.json');
+  if (!url) return;
+  showMapLoadMsg('Fetching ' + url + '…');
+  try {
+    const resp = await fetch(url, { cache: 'no-cache' });
+    if (!resp.ok){ showMapLoadMsg('Fetch failed: HTTP ' + resp.status, 'err'); return; }
+    const json = await resp.json();
+    const r = installLoadedMap(json, url);
+    if (!r.ok) showMapLoadMsg('Load failed: ' + r.error, 'err');
+  } catch (e){
+    showMapLoadMsg('Fetch error: ' + e.message, 'err');
+  }
+});
+
 document.getElementById('startBtn').addEventListener('click', () => beginService(false));
 document.getElementById('demoBtn').addEventListener('click', () => beginService(true));
 document.getElementById('resumeBtn').addEventListener('click', togglePause);
@@ -4929,7 +5032,7 @@ function togglePause(){
 window.SIM = { GS, TRAINS, MAPS, T333, scene, camera, renderer,
   get ROUTE(){return ROUTE;}, get routePts(){return routePts;}, get cab(){return cab;},
   placeCamera, updateCabAnim, updateHUD, trackPoint, riverLatAt, demoAutopilot, demoTargetSpeed,
-  physicsStep, updateStations, buildAndAttachCab, buildWorld, selectTrain, selectMap,
+  physicsStep, updateStations, buildAndAttachCab, buildWorld, selectTrain, selectMap, installLoadedMap,
   get lookYaw(){return lookYaw;}, set lookYaw(v){lookYaw=v;},
   get lookPitch(){return lookPitch;}, set lookPitch(v){lookPitch=v;} };
 

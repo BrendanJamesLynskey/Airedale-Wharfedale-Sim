@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "key": "bumblethorpe",
+  "name": "Bumblethorpe Valley Line",
+  "displayName": "BUMBLETHORPE VALLEY LINE",
+  "subtitle": "Bumblethorpe Central → Pity-Me Terminus — 26.0 km · 10 stations",
+  "biome": "countryside",
+  "service": "2X42 BUMBLETHORPE → PITY-ME",
+  "totalKm": 26.0,
+  "stations": [
+    { "km":  0.00, "name": "Bumblethorpe Central",      "code": "BUC", "plat": 200, "side": "I", "elev":  90, "lat": 53.7900, "lon": -1.4600 },
+    { "km":  3.00, "name": "Lower Snoring",             "code": "LSN", "plat":  90, "side": "L", "elev": 110, "lat": 53.7700, "lon": -1.4300 },
+    { "km":  6.00, "name": "Pratt's Bottom Halt",       "code": "PBH", "plat":  70, "side": "L", "elev": 100, "lat": 53.7500, "lon": -1.4000 },
+    { "km":  9.50, "name": "Steeple Bumpstead",         "code": "SBS", "plat": 110, "side": "I", "elev": 130, "lat": 53.7200, "lon": -1.3600 },
+    { "km": 13.00, "name": "Nether Wallop",             "code": "NWA", "plat":  80, "side": "L", "elev": 145, "lat": 53.6900, "lon": -1.3300 },
+    { "km": 16.50, "name": "Crackpot Junction",         "code": "CRP", "plat": 120, "side": "I", "elev": 160, "lat": 53.6600, "lon": -1.3000 },
+    { "km": 19.50, "name": "Upper Dumpling",            "code": "UDP", "plat":  90, "side": "L", "elev": 175, "lat": 53.6350, "lon": -1.2700 },
+    { "km": 22.00, "name": "Great Mumbling",            "code": "GMB", "plat": 100, "side": "L", "elev": 165, "lat": 53.6150, "lon": -1.2450 },
+    { "km": 24.00, "name": "Wetwang Cross",             "code": "WWX", "plat":  75, "side": "R", "elev": 150, "lat": 53.5980, "lon": -1.2200 },
+    { "km": 26.00, "name": "Pity-Me Terminus",          "code": "PME", "plat": 180, "side": "I", "elev": 130, "lat": 53.5800, "lon": -1.1950 }
+  ],
+  "schedule": [0, 240, 480, 780, 1080, 1380, 1560, 1740, 1860, 2040],
+  "limits": [
+    { "km":  0.00, "mph": 25 },
+    { "km":  0.50, "mph": 50 },
+    { "km":  1.50, "mph": 75 },
+    { "km":  5.00, "mph": 40 },
+    { "km":  5.50, "mph": 75 },
+    { "km":  9.50, "mph": 30 },
+    { "km": 10.00, "mph": 75 },
+    { "km": 14.00, "mph": 60 },
+    { "km": 15.00, "mph": 75 },
+    { "km": 19.50, "mph": 30 },
+    { "km": 20.00, "mph": 65 },
+    { "km": 25.50, "mph": 25 }
+  ],
+  "features": [
+    { "km":  2.50, "type": "viaduct", "len": 110 },
+    { "km":  4.00, "type": "bridge",  "len":  28 },
+    { "km":  6.50, "type": "mill",    "side": "L" },
+    { "km": 12.00, "type": "bridge",  "len":  32 },
+    { "km": 14.20, "type": "tunnel",  "len": 1100 },
+    { "km": 20.20, "type": "tunnel",  "len":  650 },
+    { "km": 22.00, "type": "bridge",  "len":  36 },
+    { "km": 23.40, "type": "viaduct", "len":  90 }
+  ],
+  "riverPath": [
+    { "km":  0.00, "lat":  200 },
+    { "km":  3.98, "lat":   50 },
+    { "km":  4.00, "lat":    0 },
+    { "km":  4.02, "lat":  -50 },
+    { "km":  8.00, "lat": -120 },
+    { "km": 11.98, "lat":  -50 },
+    { "km": 12.00, "lat":    0 },
+    { "km": 12.02, "lat":   50 },
+    { "km": 18.00, "lat":  100 },
+    { "km": 21.98, "lat":   50 },
+    { "km": 22.00, "lat":    0 },
+    { "km": 22.02, "lat":  -50 },
+    { "km": 26.00, "lat": -100 }
+  ],
+  "shapePoints": [
+    { "km":  1.20, "lat": 53.787, "lon": -1.450 },
+    { "km":  7.50, "lat": 53.735, "lon": -1.385 },
+    { "km": 11.00, "lat": 53.705, "lon": -1.345 },
+    { "km": 14.50, "lat": 53.676, "lon": -1.315 },
+    { "km": 17.50, "lat": 53.645, "lon": -1.285 },
+    { "km": 20.50, "lat": 53.620, "lon": -1.255 },
+    { "km": 25.00, "lat": 53.585, "lon": -1.205 }
+  ]
+}

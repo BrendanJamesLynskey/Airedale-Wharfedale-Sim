@@ -159,15 +159,81 @@ The River Wharfe joins the line at Burley and runs alongside it on the
 north side through to Ilkley. The line is 25 kV AC electrified so the
 same Class 333 / 331 stock applies.
 
-Adding a route is a single `MAP_XXX` literal + an entry in `MAPS` — the
-menu picks it up automatically and the world rebuild path is shared.
+Adding a built-in route is a single `MAP_XXX` literal + an entry in
+`MAPS` — the menu picks it up automatically and the world rebuild path
+is shared.
+
+## Custom Maps — load your own line
+
+The menu has two **LOAD…** buttons beneath the map picker:
+
+- **LOAD FROM FILE…** opens a file picker for a JSON file on your
+  device.
+- **LOAD FROM URL…** prompts for a URL (pre-filled with the bundled
+  `sample-line.json`). Same-origin URLs work directly; cross-origin
+  URLs need the source to send a permissive `Access-Control-Allow-
+  Origin` header. `file://` URLs are blocked by the browser when the
+  page is served over `http(s)://` — use the file picker for local
+  files.
+
+A loaded map appears as a new button in the picker and is selected
+automatically. The whole world rebuilds against it (track, terrain,
+river, OHLE, stations, signals, scatter, landmarks) and the cab is
+rebuilt so the printed schedule card / "N CAR" stop markers track the
+new route. If the loaded `key` collides with an existing map the
+existing entry is replaced (a green "Replaced …" message confirms);
+malformed JSON or missing required fields produce a red error message
+and leave the active map untouched.
+
+A bundled sample line — the fictional **Bumblethorpe Valley Line** —
+ships at [`sample-line.json`](./sample-line.json): 10 stations
+(Bumblethorpe Central, Lower Snoring, Pratt's Bottom Halt, Steeple
+Bumpstead, Nether Wallop, Crackpot Junction, Upper Dumpling, Great
+Mumbling, Wetwang Cross, Pity-Me Terminus), 26 km, 3 river crossings,
+2 tunnels (Crackpot, Mumbledon), 2 viaducts (Snoring, Wetwang) and a
+mill. Use it as a template when writing your own.
+
+### Map JSON schema
+
+The file is a single JSON object with the same shape as a `MAPS`
+entry. Required fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `key` | string | unique table key (loaded keys may collide with bundled ones — that replaces) |
+| `name` | string | human-readable line name |
+| `totalKm` | number | route length, must be > 0 |
+| `stations` | array | ≥ 2 entries, each with `km`, `name`, `code`, `plat`, `side` (`'L'`\|`'R'`\|`'I'`), `elev`, `lat`, `lon` |
+| `schedule` | array of numbers | cumulative seconds from departure, same length as `stations` |
+| `limits` | array | ≥ 1 entry, each `{ km, mph }` (use `km: 0` for the starting limit) |
+
+Optional fields (auto-defaulted if missing):
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `displayName` | upper-cased `name` | menu h2 / cab schedule card header |
+| `subtitle` | derived from station endpoints + km + count | menu service line |
+| `biome` | `"countryside"` | metadata tag, no rendering effect yet |
+| `service` | derived from station codes | cab schedule card top line |
+| `features` | `[]` | each `{ km, type: 'bridge'\|'tunnel'\|'viaduct'\|'mill', len?, side? }` |
+| `riverPath` | `[]` | each `{ km, lat }` — `lat` is **metres lateral offset** from track centreline, not geographic latitude; smoothstep-interpolated between control points; cross zero at bridge km for a visible crossing |
+| `shapePoints` | `[]` | each `{ km, lat, lon }` — geographic curve-control waypoints between stations |
+| `version` | absent | reserved for future schema evolution |
+
+The route is laid out by projecting station `lat`/`lon` (equi-
+rectangular about Leeds, rotated to the Leeds → Skipton bearing) and
+interpolating through them — plus any `shapePoints` — with Catmull-Rom
+curves. The terrain plane, OHLE, signals and scatter all derive from
+the resulting centreline, so any geographically-plausible set of
+lat/lons will render a coherent line.
 
 ## Roadmap
 
 - Contrasting biomes: a coastal line (e.g. St Ives Bay) and an upland
   line (e.g. a Settle–Carlisle slice) to exercise the biome system
   beyond the current countryside/moorland pair
-- User-built maps with a form-based editor and localStorage persistence
+- In-browser map editor (form-based) on top of the JSON loader
+- localStorage persistence for loaded / edited maps
 - Additional rolling stock: Class 195 (DMU)
 - Real audio recordings (CC-BY) replacing synthesised audio
 - Day / night / weather presets
