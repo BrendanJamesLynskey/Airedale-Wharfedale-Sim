@@ -436,7 +436,7 @@ const TRAINS = {
     powerNotches: 5,
     brakeNotches: 6,
     davisA: 0.85,  davisB: 0.011,  davisC: 0.00016,
-    cabBuilder: 'buildCab331',         // modern flat-panel cab — reused; tmsLabel below relabels
+    cabBuilder: 'buildCab700',         // bespoke Class 700 cab — distinct from the 331's Civity cab
     tmsLabel: 'CLASS 700/0  DMI',
     speedoUnits: 'CLASS 700/0',
     // Audio: Siemens Desiro City — Bombardier MITRAC IGBT drive sits even
@@ -4570,9 +4570,413 @@ function buildCab331(spec){
 function buildCab(spec){
   switch (spec.cabBuilder){
     case 'buildCab331': return buildCab331(spec);
+    case 'buildCab700': return buildCab700(spec);
     case 'buildCab333':
     default:            return buildCab333(spec);
   }
+}
+
+// ============================================================
+// CAB — Class 700/0 (Siemens Desiro City). Distinct from the 331's
+// Civity cab: lighter cream/white interior shell with blue trim
+// accents instead of the 331's mid-grey, a single large landscape
+// DMI dominating the centre of the desk rather than the 331's
+// portrait DMI flanked by smaller screens, a curved console with
+// pale wood-effect trim, and the safety controls clustered to the
+// right of the controller as on the real Desiro City layout.
+// Returns the same handle shape as buildCab331 / buildCab333 so
+// updateCabAnim and the audio loop can drive it without any
+// dispatcher branching.
+// ============================================================
+function buildCab700(spec){
+  const g = new THREE.Group();
+  // === Materials ===
+  const shellMat   = new THREE.MeshStandardMaterial({ color: 0xe6e2d8, roughness: 0.72, metalness: 0.05 });
+  const consMat    = new THREE.MeshStandardMaterial({ color: 0x4d525a, roughness: 0.58, metalness: 0.05 });
+  const dashMat    = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.55, metalness: 0.05 });
+  const trimBlueMat= new THREE.MeshStandardMaterial({ color: 0x1c5aa8, roughness: 0.5,  metalness: 0.05 });
+  const trimWoodMat= new THREE.MeshStandardMaterial({ color: 0x8a6e4a, roughness: 0.55, metalness: 0.05 });
+  const seatMat    = new THREE.MeshStandardMaterial({ color: 0x282838, roughness: 0.85, metalness: 0.05 });
+  const headlinerMat=new THREE.MeshStandardMaterial({ color: 0xeeece4, roughness: 0.85, metalness: 0.05 });
+  const blackMat   = new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.6,  metalness: 0.05 });
+  const chromeMat  = new THREE.MeshStandardMaterial({ color: 0xb4b8be, roughness: 0.35, metalness: 0.05 });
+  const ledOnMat   = new THREE.MeshStandardMaterial({ color: 0x9cffaf, emissive: 0x9cffaf, emissiveIntensity: 0.6 });
+  const ledOffMat  = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7,  metalness: 0.05 });
+
+  // === Cab shell ===
+  // Floor
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.06, 2.4), shellMat);
+  floor.position.set(0, -0.62, -0.5);
+  g.add(floor);
+  // Ceiling
+  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 2.4), headlinerMat);
+  ceiling.position.set(0, 1.78, -0.5);
+  g.add(ceiling);
+  // Rear bulkhead
+  const rearWall = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.5, 0.05), shellMat);
+  rearWall.position.set(0, 0.55, -1.7);
+  g.add(rearWall);
+  // Side walls (left and right A-pillars + lower shell)
+  for (const sx of [-1.7, 1.7]){
+    const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.45, 2.4), shellMat);
+    sideWall.position.set(sx, 0.55, -0.5);
+    g.add(sideWall);
+  }
+  // A-pillars framing the windscreen
+  for (const sx of [-1.45, 1.45]){
+    const aPil = new THREE.Mesh(roundedBoxGeo(0.12, 2.1, 0.30, 0.025), shellMat);
+    aPil.position.set(sx, 0.55, 0.6);
+    aPil.rotation.x = -0.12;
+    g.add(aPil);
+  }
+  // Headliner band at the top of the windscreen
+  const head = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.22, 0.30), shellMat);
+  head.position.set(0, 1.62, 0.55);
+  g.add(head);
+
+  // === Windscreen ===
+  const wsGlassMat = new THREE.MeshStandardMaterial({
+    color: 0x0a1422, metalness: 0.05, roughness: 0.1,
+    transparent: true, opacity: 0.18,
+  });
+  const ws = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.45), wsGlassMat);
+  ws.position.set(0, 0.85, 0.72);
+  ws.rotation.x = -0.15;
+  g.add(ws);
+  // Side windows (left + right)
+  for (const sx of [-1.40, 1.40]){
+    const sideWin = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.95), wsGlassMat);
+    sideWin.position.set(sx, 1.05, -0.20);
+    sideWin.rotation.y = sx < 0 ? Math.PI/2 : -Math.PI/2;
+    g.add(sideWin);
+  }
+
+  // === Curved console / dashboard ===
+  // Lower kick panel
+  const lowerPanel = new THREE.Mesh(roundedBoxGeo(2.6, 0.45, 0.65, 0.06), consMat);
+  lowerPanel.position.set(0, -0.30, 0.30);
+  lowerPanel.rotation.x = -0.18;
+  g.add(lowerPanel);
+  // Main desk slab — slight curve via tilted box
+  const desk = new THREE.Mesh(roundedBoxGeo(2.8, 0.18, 0.95, 0.08), consMat);
+  desk.position.set(0, 0.40, 0.32);
+  desk.rotation.x = -0.10;
+  g.add(desk);
+  // Pale wood trim band along the front edge of the desk
+  const woodTrim = new THREE.Mesh(roundedBoxGeo(2.7, 0.10, 0.10, 0.025), trimWoodMat);
+  woodTrim.position.set(0, 0.42, 0.74);
+  woodTrim.rotation.x = -0.10;
+  g.add(woodTrim);
+  // Dashboard housing rising up behind the desk to hold the screens
+  const dashHouse = new THREE.Mesh(roundedBoxGeo(2.8, 0.65, 0.40, 0.06), dashMat);
+  dashHouse.position.set(0, 0.85, 0.10);
+  dashHouse.rotation.x = -0.30;
+  g.add(dashHouse);
+  // Blue trim strip along the top of the dashboard
+  const blueTrim = new THREE.Mesh(roundedBoxGeo(2.7, 0.05, 0.06, 0.012), trimBlueMat);
+  blueTrim.position.set(0, 1.17, 0.18);
+  blueTrim.rotation.x = -0.30;
+  g.add(blueTrim);
+
+  // === DMI — single large landscape screen dominating the centre ===
+  const dmiCanvas = document.createElement('canvas');
+  dmiCanvas.width = 1024; dmiCanvas.height = 640;
+  const dmiCtx = dmiCanvas.getContext('2d');
+  const dmiTex = new THREE.CanvasTexture(dmiCanvas);
+  dmiTex.colorSpace = THREE.SRGBColorSpace;
+  function drawDmi(){
+    const W = 1024, H = 640;
+    const ctx = dmiCtx;
+    ctx.fillStyle = '#0a1422'; ctx.fillRect(0, 0, W, H);
+    // Top header bar
+    ctx.fillStyle = '#1c5aa8'; ctx.fillRect(0, 0, W, 50);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 26px Orbitron, sans-serif';
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText(spec.tmsLabel || 'CLASS 700/0  DMI', 24, 25);
+    ctx.textAlign = 'right';
+    ctx.font = '20px Roboto Mono, monospace';
+    ctx.fillText(`${routeHeadcode()}  ${routeEndcodes(' → ')}`, W - 24, 25);
+    // Massive speed readout — left side, 4-digit space
+    const v = (window.GS?.v ?? 0);
+    const mph = (v * 2.23694);
+    const mphRound = mph.toFixed(0);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 280px Orbitron, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(mphRound, 280, 320);
+    ctx.fillStyle = '#7fbfff'; ctx.font = 'bold 38px Orbitron, sans-serif';
+    ctx.fillText('MPH', 280, 510);
+    // Vertical limit bar on the right of the speed
+    const lim = (window.SIM?.GS && window.GS && window.SIM ? (window.SIM.GS.v || 0) : 0); // safety
+    // Pull the limit from the existing helper if reachable
+    let limMph = 60;
+    try { limMph = (typeof speedLimitAt === 'function') ? speedLimitAt(window.SIM?.GS?.km ?? 0) : 60; } catch (_){}
+    // Background bar
+    const bx = 540, by = 110, bw = 80, bh = 380;
+    ctx.fillStyle = '#0d1c30'; ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = '#3a6db0'; ctx.lineWidth = 3; ctx.strokeRect(bx, by, bw, bh);
+    // Limit marker
+    const limY = by + bh - (limMph / 125) * bh;
+    ctx.fillStyle = '#e0c050'; ctx.fillRect(bx - 5, limY - 3, bw + 10, 6);
+    // Speed fill from bottom
+    const spY = by + bh - clamp(mph / 125, 0, 1) * bh;
+    const overLim = mph > limMph;
+    ctx.fillStyle = overLim ? '#ff6060' : '#5cbf78';
+    ctx.fillRect(bx + 4, spY, bw - 8, by + bh - spY - 4);
+    ctx.fillStyle = '#7fbfff'; ctx.font = 'bold 22px Roboto Mono';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('LIM', bx + bw + 14, limY + 2);
+    ctx.fillText(`${limMph}`, bx + bw + 14, limY + 28);
+    // Right column: next station + service info
+    const ns = (window.SIM?.GS?.nextStationIdx != null) ? ROUTE.stations[window.SIM.GS.nextStationIdx] : null;
+    const rx = 720;
+    ctx.fillStyle = '#7fbfff'; ctx.font = 'bold 26px Orbitron'; ctx.textAlign='left';
+    ctx.fillText('NEXT', rx, 110);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 36px Roboto Mono';
+    ctx.fillText(ns ? (ns.code + '  ' + ns.name) : '----', rx, 156);
+    ctx.fillStyle = '#7fbfff'; ctx.font = '20px Roboto Mono';
+    ctx.fillText(ns ? (ns.km.toFixed(2) + ' km · plat ' + ns.plat + ' m') : '', rx, 192);
+    // Brake-cylinder and main-reservoir bars
+    function bar(label, y, val, mx){
+      ctx.fillStyle = '#7fbfff'; ctx.font = '18px Orbitron'; ctx.textAlign='left';
+      ctx.fillText(label, rx, y);
+      ctx.fillStyle = '#0d1c30'; ctx.fillRect(rx, y + 8, 260, 18);
+      ctx.fillStyle = val > 0.6 ? '#e0a040' : '#5cbf78';
+      ctx.fillRect(rx + 2, y + 10, 256 * clamp(val, 0, 1), 14);
+      ctx.fillStyle = '#cfe6f7'; ctx.font = '16px Roboto Mono';
+      ctx.fillText((val * mx).toFixed(1) + ' BAR', rx + 270, y + 22);
+    }
+    const notch = (window.SIM?.GS?.notch ?? 0);
+    const bc = notch < 0 ? Math.min(4.0, -notch * 0.8) : 0;
+    bar('BC', 260, bc / 4.0, 4.0);
+    bar('MR',  330, 0.78, 12.0);
+    // Status footer
+    ctx.fillStyle = '#0d1c30'; ctx.fillRect(0, H - 44, W, 44);
+    ctx.fillStyle = '#7fbfff'; ctx.font = '16px Orbitron'; ctx.textAlign='left';
+    ctx.fillText('AWS   DRA   TPWS   HEAD   DOORS   GSM-R', 20, H - 22);
+    ctx.fillStyle = '#5cbf78'; ctx.textAlign='right';
+    ctx.fillText('SERVICE  RUNNING', W - 20, H - 22);
+  }
+  drawDmi();
+  // DMI screen plane mounted into the dashboard housing
+  const dmiPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.30, 0.81),
+    new THREE.MeshBasicMaterial({ map: dmiTex })
+  );
+  dmiPlane.position.set(0, 0.95, 0.30);
+  dmiPlane.rotation.x = -0.30;
+  g.add(dmiPlane);
+  // DMI bezel
+  const dmiBezel = new THREE.Mesh(roundedBoxGeo(1.38, 0.89, 0.03, 0.012), blackMat);
+  dmiBezel.position.set(0, 0.95, 0.295);
+  dmiBezel.rotation.x = -0.30;
+  g.add(dmiBezel);
+
+  // === TMS — small status screen on the left ===
+  const tmsCanvas = document.createElement('canvas');
+  tmsCanvas.width = 384; tmsCanvas.height = 256;
+  const tmsCtx = tmsCanvas.getContext('2d');
+  const tmsTex = new THREE.CanvasTexture(tmsCanvas);
+  tmsTex.colorSpace = THREE.SRGBColorSpace;
+  (function drawTms(){
+    tmsCtx.fillStyle = '#0a1422'; tmsCtx.fillRect(0, 0, 384, 256);
+    tmsCtx.fillStyle = '#1c5aa8'; tmsCtx.fillRect(0, 0, 384, 32);
+    tmsCtx.fillStyle = '#ffffff'; tmsCtx.font = 'bold 16px Orbitron'; tmsCtx.textAlign='left'; tmsCtx.textBaseline='middle';
+    tmsCtx.fillText('TMS', 16, 16);
+    tmsCtx.font = '18px Roboto Mono'; tmsCtx.fillStyle = '#5cbf78';
+    const rows = ['UNIT 700/0', '8-CAR  162.6 m', 'BRAKE TEST  OK', 'DOORS  CLOSED', 'PANTO  UP', 'TRACTION  READY'];
+    for (let i = 0; i < rows.length; i++) tmsCtx.fillText(rows[i], 20, 60 + i * 30);
+  })();
+  const tmsPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.28), new THREE.MeshBasicMaterial({ map: tmsTex }));
+  tmsPlane.position.set(-0.92, 0.95, 0.30);
+  tmsPlane.rotation.x = -0.30;
+  g.add(tmsPlane);
+  // ETCS placeholder on the right
+  const etcsCanvas = document.createElement('canvas');
+  etcsCanvas.width = 384; etcsCanvas.height = 256;
+  const etcsCtx = etcsCanvas.getContext('2d');
+  const etcsTex = new THREE.CanvasTexture(etcsCanvas);
+  etcsTex.colorSpace = THREE.SRGBColorSpace;
+  (function drawEtcs(){
+    etcsCtx.fillStyle = '#0a1422'; etcsCtx.fillRect(0, 0, 384, 256);
+    etcsCtx.fillStyle = '#1c5aa8'; etcsCtx.fillRect(0, 0, 384, 32);
+    etcsCtx.fillStyle = '#ffffff'; etcsCtx.font = 'bold 16px Orbitron';
+    etcsCtx.textAlign='left'; etcsCtx.textBaseline='middle';
+    etcsCtx.fillText('ETCS DMI', 16, 16);
+    etcsCtx.fillStyle = '#7fbfff'; etcsCtx.font = '20px Orbitron'; etcsCtx.textAlign='center';
+    etcsCtx.fillText('LEVEL NTC', 192, 96);
+    etcsCtx.fillStyle = '#cfe6f7'; etcsCtx.font = '14px Roboto Mono';
+    etcsCtx.fillText('UK ERTMS NOT FITTED', 192, 140);
+    etcsCtx.fillText('FALLBACK TPWS/AWS', 192, 170);
+  })();
+  const etcsPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.28), new THREE.MeshBasicMaterial({ map: etcsTex }));
+  etcsPlane.position.set(0.92, 0.95, 0.30);
+  etcsPlane.rotation.x = -0.30;
+  g.add(etcsPlane);
+
+  // === Master controller — single lever on the right side of the desk ===
+  const cBase = new THREE.Mesh(roundedBoxGeo(0.22, 0.10, 0.22, 0.025), chromeMat);
+  cBase.position.set(0.55, 0.51, 0.42);
+  g.add(cBase);
+  const lever = new THREE.Mesh(roundedBoxGeo(0.05, 0.42, 0.05, 0.015), blackMat);
+  lever.position.set(0.55, 0.74, 0.42);
+  g.add(lever);
+  // Knob on top of the lever
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), blackMat);
+  knob.position.set(0.55, 0.96, 0.42);
+  g.add(knob);
+  // Notch position indicator (lights when at active notch)
+  const notchDot = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.005, 12), ledOnMat);
+  notchDot.position.set(0.65, 0.56, 0.42);
+  notchDot.rotation.x = Math.PI/2;
+  g.add(notchDot);
+
+  // === Safety controls cluster — right side beyond the controller ===
+  // AWS sunflower — same canvas-painted texture pair the 333/331 cabs use.
+  const awsTexN = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createRadialGradient(128,128, 100, 128,128, 128);
+    grad.addColorStop(0,'#3a3a3c'); grad.addColorStop(1,'#1a1a1a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(128,128, 100, 0, Math.PI*2); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  })();
+  const awsTexW = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createRadialGradient(128,128, 100, 128,128, 128);
+    grad.addColorStop(0,'#3a3a3c'); grad.addColorStop(1,'#1a1a1a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+    for (let i = 0; i < 8; i++){
+      ctx.fillStyle = (i % 2 === 0) ? '#ffd400' : '#000';
+      ctx.beginPath(); ctx.moveTo(128,128);
+      ctx.arc(128,128, 100, i*Math.PI/4, (i+1)*Math.PI/4); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(128,128, 28, 0, Math.PI*2); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  })();
+  const awsMat = new THREE.MeshBasicMaterial({ map: awsTexN });
+  const aws = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), awsMat);
+  aws.position.set(0.95, 0.55, 0.36);
+  aws.rotation.x = -0.10;
+  g.add(aws);
+  // DRA — large illuminated red mushroom
+  const draMat = new THREE.MeshStandardMaterial({ color: 0xa01818, emissive: 0x600808, emissiveIntensity: 0.0, roughness: 0.5, metalness: 0.05 });
+  const draBase = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.04, 16), chromeMat);
+  draBase.position.set(1.18, 0.54, 0.40);
+  g.add(draBase);
+  const draCap = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.04, 16), draMat);
+  draCap.position.set(1.18, 0.58, 0.40);
+  g.add(draCap);
+  // Emergency Brake Plunger — large red shrouded mushroom
+  const ebpRing = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 16), blackMat);
+  ebpRing.position.set(1.40, 0.54, 0.42);
+  g.add(ebpRing);
+  const ebpMat = new THREE.MeshStandardMaterial({ color: 0xcc1010, roughness: 0.45, metalness: 0.05 });
+  const ebp = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.06, 16), ebpMat);
+  ebp.position.set(1.40, 0.62, 0.42);
+  g.add(ebp);
+
+  // === TPWS panel — yellow-trimmed unit on the left of the desk ===
+  const tpwsHousing = new THREE.Mesh(roundedBoxGeo(0.42, 0.16, 0.05, 0.012),
+    new THREE.MeshStandardMaterial({ color: 0xf6d020, metalness: 0.05, roughness: 0.5 }));
+  tpwsHousing.position.set(-0.95, 0.55, 0.40);
+  tpwsHousing.rotation.x = -0.10;
+  g.add(tpwsHousing);
+  const tpwsBtnOverride = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.015, 12), blackMat);
+  tpwsBtnOverride.position.set(-1.08, 0.57, 0.41); tpwsBtnOverride.rotation.x = Math.PI/2;
+  g.add(tpwsBtnOverride);
+  const tpwsBtnBrakeDem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.015, 12),
+    new THREE.MeshStandardMaterial({ color: 0xff4040, emissive: 0x800000, emissiveIntensity: 0.0, roughness: 0.5 }));
+  tpwsBtnBrakeDem.position.set(-0.95, 0.57, 0.41); tpwsBtnBrakeDem.rotation.x = Math.PI/2;
+  g.add(tpwsBtnBrakeDem);
+  const tpwsBtnIsolation = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.015, 12), blackMat);
+  tpwsBtnIsolation.position.set(-0.82, 0.57, 0.41); tpwsBtnIsolation.rotation.x = Math.PI/2;
+  g.add(tpwsBtnIsolation);
+
+  // === Door release / horn / cab switches ===
+  function btn(x, y, z, color){
+    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.05 });
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.014, 12), m);
+    b.position.set(x, y, z); b.rotation.x = Math.PI/2;
+    g.add(b);
+    return b;
+  }
+  const doorBtnL = btn(-0.42, 0.50, 0.50, 0x3070c8);
+  const doorBtnR = btn(-0.30, 0.50, 0.50, 0xa05030);
+  // Indicator LED strip across the dashboard
+  function makeLed(x, label, hex){
+    const lm = new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.6 });
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 6), lm);
+    led.position.set(x, 1.20, 0.20);
+    g.add(led);
+    return led;
+  }
+  const ledDsd  = makeLed(-0.6, 'DSD',  0x224422);
+  const ledHead = makeLed(-0.3, 'HEAD', 0x444422);
+  const ledDoor = makeLed( 0.0, 'DOOR', 0x224488);
+  const ledTpws = makeLed( 0.3, 'TPWS', 0xffaa44);
+  const ledRgs  = makeLed( 0.6, 'REGN', 0x44aa44);
+  const ledHorn = makeLed( 0.9, 'HORN', 0x44aaff);
+
+  // === Side switches — headlights / wipers / cab light ===
+  function rocker(x, y, z, capColor){
+    const housing = new THREE.Mesh(roundedBoxGeo(0.06, 0.08, 0.06, 0.012), chromeMat);
+    housing.position.set(x, y, z);
+    g.add(housing);
+    const cap = new THREE.Mesh(roundedBoxGeo(0.052, 0.04, 0.052, 0.008),
+      new THREE.MeshStandardMaterial({ color: capColor, roughness: 0.6, metalness: 0.05 }));
+    cap.position.set(x, y + 0.045, z);
+    g.add(cap);
+    return { cap };
+  }
+  const swHead    = rocker(-1.22, 0.52, 0.42, 0xc0c8d0);
+  const swWipers  = rocker(-1.32, 0.52, 0.42, 0xc0c8d0);
+  const swCabLight= rocker(-1.42, 0.52, 0.42, 0xc0c8d0);
+
+  // === Driver seat — single bolster + back, dark fabric ===
+  const seatBase = new THREE.Mesh(roundedBoxGeo(0.55, 0.10, 0.50, 0.05), seatMat);
+  seatBase.position.set(0, -0.05, -0.5);
+  g.add(seatBase);
+  const seatBack = new THREE.Mesh(roundedBoxGeo(0.55, 0.70, 0.10, 0.05), seatMat);
+  seatBack.position.set(0, 0.30, -0.75);
+  seatBack.rotation.x = 0.12;
+  g.add(seatBack);
+  const seatStem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.50, 12), blackMat);
+  seatStem.position.set(0, -0.35, -0.5);
+  g.add(seatStem);
+
+  // === Wipers (visible from inside on the glass) ===
+  const wiperMat = new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.55, metalness: 0.05 });
+  function wiper(side){
+    const armW = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.85, 0.018), wiperMat);
+    armW.position.set(side * 0.5, 0.84, 0.71);
+    armW.rotation.x = -0.15;
+    armW.rotation.z = side * 0.18;
+    g.add(armW);
+    return armW;
+  }
+  const wL = wiper(-1);
+  const wR = wiper(+1);
+
+  return {
+    group: g,
+    speedoNeedle: null, pressNeedle: null, pressNeedle2: null, mrNeedle: null,
+    lever, notchDot,
+    awsMat, awsTexN, awsTexW,
+    ledHead, ledDoor, ledDsd, ledTpws, ledRgs, ledHorn,
+    swHead, swWipers, swCabLight,
+    wL, wR,
+    draMat, draCap,
+    tpwsBtnOverride, tpwsBtnBrakeDem, tpwsBtnIsolation,
+    doorBtnL, doorBtnR,
+    speedDigitsCanvas: dmiCanvas,
+    speedDigitsCtx:    dmiCtx,
+    speedDigitsTex:    dmiTex,
+    drawSpeedDigits:   drawDmi,
+    drawDmi,
+    dmiTex,
+  };
 }
 
 // Repaint dynamic platform stop-markers (e.g. Shipley's "4 CAR" / "3 CAR" plate)
@@ -4702,6 +5106,58 @@ function buildCarBody(carLen, isCab){
     ws.position.set(0, bodyBaseY + bodyH * 0.7, bodyLen/2 + noseD - 0.04);
     ws.rotation.x = 0.15;
     car.add(ws);
+    // Lower yellow fairing under the windscreen — extends the warning panel.
+    const lowerFairing = new THREE.Mesh(
+      roundedBoxGeo(bodyW * 0.92, 0.55, 0.7, 0.1),
+      yellowMat
+    );
+    lowerFairing.position.set(0, bodyBaseY + 0.3, bodyLen/2 + noseD - 0.05);
+    car.add(lowerFairing);
+    // Snowplough pilot — black wedge below the bumper for visual heft.
+    const ploughMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.05, roughness: 0.7 });
+    const plough = new THREE.Mesh(
+      roundedBoxGeo(bodyW * 0.86, 0.32, 0.55, 0.08),
+      ploughMat
+    );
+    plough.position.set(0, 0.42, bodyLen/2 + noseD + 0.04);
+    plough.rotation.x = -0.3;          // angled forward and down
+    car.add(plough);
+    // Destination roller-blind strip above the windscreen.
+    const destMat = new THREE.MeshStandardMaterial({
+      color: 0x141414, emissive: 0xff8420, emissiveIntensity: 0.35,
+      metalness: 0.05, roughness: 0.5,
+    });
+    const dest = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.7, 0.22, 0.08), destMat);
+    dest.position.set(0, bodyBaseY + bodyH - 0.05, bodyLen/2 + 0.05);
+    car.add(dest);
+    // Wipers — two stowed arms angled across the windscreen.
+    const wiperMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.05, roughness: 0.55 });
+    for (const dx of [-0.7, 0.0]){
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.85, 0.025), wiperMat);
+      arm.position.set(dx + 0.35, bodyBaseY + bodyH * 0.65, bodyLen/2 + noseD - 0.02);
+      arm.rotation.x = -0.25;
+      arm.rotation.z = -0.15;
+      car.add(arm);
+    }
+    // Headlight bezels — chrome rings around the lamps.
+    const bezelMat = new THREE.MeshStandardMaterial({ color: 0x202428, metalness: 0.05, roughness: 0.5 });
+    for (const dx of [-0.8, 0.8]){
+      const bezel = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.03, 16), bezelMat);
+      bezel.position.set(dx, bodyBaseY + 1.0, bodyLen/2 + noseD - 0.13);
+      bezel.rotation.x = Math.PI/2;
+      car.add(bezel);
+    }
+    // Red marker / tail lamps inboard of the headlights.
+    const tailMat = new THREE.MeshStandardMaterial({
+      color: 0xff5050, emissive: 0xcc1010, emissiveIntensity: 0.45,
+      metalness: 0.05, roughness: 0.45,
+    });
+    for (const dx of [-0.45, 0.45]){
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.04, 12), tailMat);
+      tail.position.set(dx, bodyBaseY + 0.62, bodyLen/2 + noseD - 0.06);
+      tail.rotation.x = Math.PI/2;
+      car.add(tail);
+    }
     const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff5d0, emissive: 0xffeec0, emissiveIntensity: 0.55, metalness: 0.05, roughness: 0.3 });
     for (const dx of [-0.8, 0.8]){
       const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 16), lightMat);
@@ -4711,6 +5167,70 @@ function buildCarBody(carLen, isCab){
     }
   }
   return car;
+}
+
+// Pantograph — UK single-arm style (Brecknell-Willis / Schunk WBL). Base
+// plate with two porcelain insulators, lower arm hinged at the base
+// angled up-and-forward, upper arm continuing up-and-back, transverse
+// contact bow at the top with a carbon collector strip running along
+// it. All metal parts use low metalness so they shade against the sky
+// rather than going black.
+function buildPantograph(){
+  const g = new THREE.Group();
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0x383b40, metalness: 0.05, roughness: 0.55 });
+  const carbonMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, metalness: 0.05, roughness: 0.6 });
+  const insulMat = new THREE.MeshStandardMaterial({ color: 0xd0c8a8, metalness: 0.05, roughness: 0.55 });
+  // Base plate
+  const base = new THREE.Mesh(roundedBoxGeo(1.65, 0.10, 0.85, 0.04), metalMat);
+  base.position.set(0, 0.05, 0);
+  g.add(base);
+  // Insulators — two ribbed porcelain columns
+  for (const x of [-0.58, 0.58]){
+    const ins = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.42, 14), insulMat);
+    ins.position.set(x, 0.31, 0);
+    g.add(ins);
+    // Rings down the insulator
+    for (let r = 0; r < 4; r++){
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.025, 14), insulMat);
+      ring.position.set(x, 0.18 + r * 0.10, 0);
+      g.add(ring);
+    }
+  }
+  // Lower arm — slopes up and forward from base hinge to the elbow
+  const lowerArm = new THREE.Mesh(roundedBoxGeo(0.08, 1.55, 0.10, 0.025), metalMat);
+  // Centre at midpoint between base hinge and elbow
+  lowerArm.position.set(0, 0.95, -0.35);
+  lowerArm.rotation.x = 0.40;        // tilt forward
+  g.add(lowerArm);
+  // Elbow joint
+  const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), metalMat);
+  elbow.position.set(0, 1.55, -0.95);
+  g.add(elbow);
+  // Upper arm — slopes back from elbow up to the contact bow
+  const upperArm = new THREE.Mesh(roundedBoxGeo(0.07, 1.35, 0.085, 0.022), metalMat);
+  upperArm.position.set(0, 2.05, -0.35);
+  upperArm.rotation.x = -0.85;       // tilt back
+  g.add(upperArm);
+  // Crossbar at the apex
+  const apex = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), metalMat);
+  apex.position.set(0, 2.55, 0.20);
+  g.add(apex);
+  // Contact bow — wide horizontal "T"
+  const bow = new THREE.Mesh(roundedBoxGeo(1.45, 0.045, 0.12, 0.012), metalMat);
+  bow.position.set(0, 2.60, 0.20);
+  g.add(bow);
+  // Carbon collector strip on top of the bow
+  const strip = new THREE.Mesh(roundedBoxGeo(1.40, 0.03, 0.06, 0.008), carbonMat);
+  strip.position.set(0, 2.64, 0.20);
+  g.add(strip);
+  // Bow horns at each end of the contact strip
+  for (const ex of [-0.72, 0.72]){
+    const horn = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.14, 8), metalMat);
+    horn.position.set(ex, 2.69, 0.20);
+    horn.rotation.z = ex < 0 ? 0.6 : -0.6;
+    g.add(horn);
+  }
+  return g;
 }
 
 function buildAndAttachTrainBody(spec){
@@ -4731,6 +5251,19 @@ function buildAndAttachTrainBody(spec){
     const car = buildCarBody(carLen, i === 0);
     car.userData = { carIndex: i, carLen };
     trainBody.add(car);
+  }
+  // Pantograph on the middle car of the unit. Real UK EMUs have one or two
+  // per 4-car set; for visual character a single pan in the middle reads
+  // best from free cam and applies to every unit length (3/4/8 cars).
+  const panCarIdx = Math.max(1, Math.floor(spec.cars / 2));
+  if (panCarIdx < trainBody.children.length){
+    const pan = buildPantograph();
+    // Roof is at body top: bodyBaseY (1.05) + bodyH (2.75) = 3.80 m
+    // Pan car body length = (carLen - 0.5) — drop the pan toward the rear
+    // of the car (positive local Z is forward; negative is rear) so it's
+    // visually behind the gangway.
+    pan.position.set(0, 3.85, -(carLen - 0.5) * 0.15);
+    trainBody.children[panCarIdx].add(pan);
   }
   scene.add(trainBody);
 }
