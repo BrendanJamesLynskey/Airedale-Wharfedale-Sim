@@ -173,17 +173,17 @@ const MAP_AIREDALE = {
   // through accurate waypoints — see trackPoint below).
   // stopMarker: optional label rendered as a "stop car marker" on the platform.
   stations: [
-    { km:  0.00, name: 'Leeds',                code: 'LDS', plat: 250, side: 'I', elev: 50, plat_no: 13, lat: 53.7958, lon: -1.5479 },
+    { km:  0.00, name: 'Leeds',                code: 'LDS', plat: 250, side: 'I', elev: 50, plat_no: 13, lat: 53.7958, lon: -1.5479, footbridge: true },
     { km:  6.40, name: 'Kirkstall Forge',      code: 'KLF', plat: 130, side: 'L', elev: 60,              lat: 53.8249, lon: -1.6068 },
     { km: 10.60, name: 'Apperley Bridge',      code: 'APY', plat: 100, side: 'L', elev: 80,              lat: 53.8347, lon: -1.7000 },
-    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80, stopMarker: 'cars', lat: 53.8348, lon: -1.7706 },
+    { km: 14.45, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev: 80, stopMarker: 'cars', lat: 53.8348, lon: -1.7706, footbridge: true },
     { km: 15.65, name: 'Saltaire',             code: 'SAE', plat: 110, side: 'L', elev: 80,              lat: 53.8388, lon: -1.7918 },
     { km: 19.50, name: 'Bingley',              code: 'BIY', plat: 130, side: 'L', elev: 90,              lat: 53.8480, lon: -1.8378 },
     { km: 20.85, name: 'Crossflatts',          code: 'CFL', plat:  95, side: 'L', elev: 95,              lat: 53.8505, lon: -1.8519 },
-    { km: 25.45, name: 'Keighley',             code: 'KEI', plat: 175, side: 'I', elev: 100,             lat: 53.8678, lon: -1.9036 },
+    { km: 25.45, name: 'Keighley',             code: 'KEI', plat: 175, side: 'I', elev: 100,             lat: 53.8678, lon: -1.9036, footbridge: true },
     { km: 28.55, name: 'Steeton & Silsden',    code: 'SON', plat: 100, side: 'L', elev: 115,             lat: 53.8941, lon: -1.9456 },
     { km: 32.50, name: 'Cononley',             code: 'CEY', plat:  95, side: 'L', elev: 110,             lat: 53.9276, lon: -1.9766 },
-    { km: 41.80, name: 'Skipton',              code: 'SKI', plat: 200, side: 'I', elev: 120,             lat: 53.9608, lon: -2.0163 },
+    { km: 41.80, name: 'Skipton',              code: 'SKI', plat: 200, side: 'I', elev: 120,             lat: 53.9608, lon: -2.0163, footbridge: true },
   ],
   // Schedule (cumulative seconds from departure Leeds)
   schedule: [0, 480, 720, 1020, 1140, 1380, 1500, 1740, 1920, 2100, 2580],
@@ -285,13 +285,13 @@ const MAP_WHARFEDALE = {
   service: '2L72 SHIPLEY → ILKLEY',
   totalKm: 17.0,
   stations: [
-    { km:  0.00, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev:  80, plat_no: 5, lat: 53.8348, lon: -1.7706 },
+    { km:  0.00, name: 'Shipley',              code: 'SHY', plat: 180, side: 'I', elev:  80, plat_no: 5, lat: 53.8348, lon: -1.7706, footbridge: true },
     { km:  2.40, name: 'Baildon',              code: 'BLD', plat:  85, side: 'L', elev: 130,             lat: 53.8526, lon: -1.7670 },
     { km:  7.10, name: 'Guiseley',             code: 'GSY', plat: 100, side: 'I', elev: 130,             lat: 53.8770, lon: -1.7160 },
     { km:  9.50, name: 'Menston',              code: 'MNN', plat:  85, side: 'L', elev: 140,             lat: 53.8893, lon: -1.7400 },
     { km: 12.40, name: 'Burley-in-Wharfedale', code: 'BUW', plat:  85, side: 'L', elev: 120,             lat: 53.9075, lon: -1.7560 },
     { km: 15.00, name: 'Ben Rhydding',         code: 'BEY', plat:  90, side: 'L', elev:  95,             lat: 53.9180, lon: -1.7985 },
-    { km: 17.00, name: 'Ilkley',               code: 'ILK', plat: 175, side: 'I', elev:  85,             lat: 53.9266, lon: -1.8211 },
+    { km: 17.00, name: 'Ilkley',               code: 'ILK', plat: 175, side: 'I', elev:  85,             lat: 53.9266, lon: -1.8211, footbridge: true },
   ],
   // Schedule (cumulative seconds from departure Shipley) — ~22 min stopper.
   schedule: [0, 240, 540, 720, 900, 1080, 1320],
@@ -1293,6 +1293,42 @@ function makeNameBoardTexture(name, code){
   return t;
 }
 
+// Rounded box geometry — a drop-in replacement for THREE.BoxGeometry that
+// softens the corners and edges so platform furniture / canopies / buffer
+// stops don't read as raw cubes. The shape is a rounded rectangle in XY
+// extruded along Z with a small bevel on the depth ends, so all 12 edges
+// of the box get rounded. The bevel pushes the final bounding box outward
+// by `bev` on each axis, so for thin meshes (< 0.15 m in the smallest
+// dimension) the relative inflation gets large — those callers should
+// keep BoxGeometry. Clamps the corner radius against the smallest input
+// dimension so degenerate shapes never get produced.
+function roundedBoxGeo(W, H, D, r = 0.03, bevSegs = 2){
+  const cr = Math.max(0.0005, Math.min(r, W / 2 - 0.001, H / 2 - 0.001));
+  const bev = Math.max(0.0005, Math.min(cr, D / 2 - 0.001));
+  const hw = W / 2, hh = H / 2;
+  const s = new THREE.Shape();
+  s.moveTo(-hw + cr, -hh);
+  s.lineTo(hw - cr, -hh);
+  s.quadraticCurveTo(hw, -hh, hw, -hh + cr);
+  s.lineTo(hw, hh - cr);
+  s.quadraticCurveTo(hw, hh, hw - cr, hh);
+  s.lineTo(-hw + cr, hh);
+  s.quadraticCurveTo(-hw, hh, -hw, hh - cr);
+  s.lineTo(-hw, -hh + cr);
+  s.quadraticCurveTo(-hw, -hh, -hw + cr, -hh);
+  const geo = new THREE.ExtrudeGeometry(s, {
+    depth: D - 2 * bev,
+    bevelEnabled: true,
+    bevelSize: bev,
+    bevelThickness: bev,
+    bevelSegments: bevSegs,
+    curveSegments: 4,
+  });
+  // ExtrudeGeometry leaves the geometry along +Z from 0..D-2*bev; centre on Z.
+  geo.translate(0, 0, -(D - 2 * bev) / 2);
+  return geo;
+}
+
 function buildStations(){
   const group = new THREE.Group();
   const platformH = 0.95;
@@ -1420,7 +1456,7 @@ function buildStations(){
           const shelterLenV = min(platLen * 0.55, 22);
           const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1f3a2a, roughness: 0.6, metalness: 0.2 });
           const canopy = new THREE.Mesh(
-            new THREE.BoxGeometry(platformW * 1.05, 0.18, shelterLenV),
+            roundedBoxGeo(platformW * 1.05, 0.18, shelterLenV, 0.04),
             canopyMat
           );
           canopy.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 3.0, 0));
@@ -1440,7 +1476,7 @@ function buildStations(){
           // Brick back wall on the cess (track-facing) side
           const brickMat = new THREE.MeshStandardMaterial({ color: 0x8b5a48, roughness: 0.92 });
           const backWall = new THREE.Mesh(
-            new THREE.BoxGeometry(0.22, 2.5, shelterLenV * 0.9),
+            roundedBoxGeo(0.22, 2.5, shelterLenV * 0.9, 0.04),
             brickMat
           );
           backWall.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat - sign * platformW * 0.42)).add(new THREE.Vector3(0, platformH + 1.45, 0));
@@ -1498,7 +1534,7 @@ function buildStations(){
           // Modern (default) — grey-blue slab with slim metal posts.
           const shelterLen = min(platLen * 0.4, 16);
           const shelter = new THREE.Mesh(
-            new THREE.BoxGeometry(platformW * 0.8, 0.20, shelterLen),
+            roundedBoxGeo(platformW * 0.8, 0.20, shelterLen, 0.03),
             new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness:0.7, metalness:0.3 })
           );
           shelter.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 2.6, 0));
@@ -1513,6 +1549,10 @@ function buildStations(){
             pg.add(pst);
           }));
         }
+      }
+      // ---- Ticket machine on each non-halt primary platform face ----
+      if (!isHalt){
+        pg.add(buildTicketMachine(s, centreLat, sign, halfKm));
       }
 
       // ---- Name boards ----
@@ -1716,6 +1756,12 @@ function buildStations(){
     if (stationType === 'junction'){
       group.add(buildJunctionStub(s));
     }
+    // Footbridge — pedestrian overpass spanning the running tracks with
+    // staircases down to the L and R primary platforms. Opt-in via the
+    // station's `footbridge` field; rendered for non-halts only.
+    if (s.footbridge && !isHalt){
+      group.add(buildFootbridge(s, halfKm));
+    }
   }
   return group;
 }
@@ -1731,7 +1777,7 @@ function buildBufferStop(s, halfKm){
   const yaw = Math.atan2(-f.t.x, -f.t.z);
   const baseW = TRACK_GAUGE_OFFSET + 3.5;
   const base = new THREE.Mesh(
-    new THREE.BoxGeometry(baseW, 0.5, 0.5),
+    roundedBoxGeo(baseW, 0.5, 0.5, 0.06),
     new THREE.MeshStandardMaterial({ color: 0x9a958e, roughness: 0.95 })
   );
   base.position.copy(f.p).add(f.r.clone().multiplyScalar(TRACK_GAUGE_OFFSET / 2)).add(new THREE.Vector3(0, 0.25, 0));
@@ -1753,7 +1799,7 @@ function buildBufferStop(s, halfKm){
   const stripeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.6 });
   [0, TRACK_GAUGE_OFFSET].forEach(trackCenter => {
     const upright = new THREE.Mesh(
-      new THREE.BoxGeometry(0.6, 1.6, 0.4),
+      roundedBoxGeo(0.6, 1.6, 0.4, 0.06),
       stripeMat
     );
     upright.position.copy(f.p).add(f.r.clone().multiplyScalar(trackCenter)).add(new THREE.Vector3(0, 1.3, 0));
@@ -1811,6 +1857,136 @@ function buildJunctionStub(s){
       );
       rail.rotation.y = stubYaw;
       g.add(rail);
+    }
+  }
+  return g;
+}
+
+// Ticket machine — slim kiosk body with a glowing LCD on the track-facing
+// side. Auto-added to every primary platform face on non-halt stations.
+// Sits 30 cm behind the platform centre (away from the track), with the
+// screen on the inner side so the cab sees it as the train arrives. Body
+// and screen are both rounded so the corners read as a real piece of
+// station furniture rather than a flat cuboid.
+const STATION_PLATFORM_H = 0.95;
+function buildTicketMachine(s, centreLat, sign, halfKm){
+  const g = new THREE.Group();
+  const km = min(s.km + halfKm * 0.4, ROUTE.totalKm - 0.001);
+  const f = trackFrame(km);
+  const yaw = Math.atan2(-f.t.x, -f.t.z);
+  const bodyW = 0.45, bodyH = 1.45, bodyD = 0.35;
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a3d52, roughness: 0.35, metalness: 0.45 });
+  const body = new THREE.Mesh(roundedBoxGeo(bodyW, bodyH, bodyD, 0.045), bodyMat);
+  body.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat - sign * 0.3)).add(new THREE.Vector3(0, STATION_PLATFORM_H + bodyH / 2, 0));
+  body.rotation.y = yaw;
+  g.add(body);
+  // Glowing LCD on the track-facing side. PlaneGeometry is paper-thin so
+  // rounding it would distort it; a flat plane is fine here, the rounded
+  // body behind hides the seam.
+  const screenMat = new THREE.MeshStandardMaterial({
+    color: 0x66b8e0, emissive: 0x4a8eb8, emissiveIntensity: 0.55, roughness: 0.25,
+  });
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(bodyW * 0.68, bodyH * 0.32), screenMat);
+  // Position on the track-facing face of the body, lifted to about chest height.
+  const screenLat = centreLat - sign * 0.3 + sign * (bodyD / 2 + 0.002);
+  screen.position.copy(f.p).add(f.r.clone().multiplyScalar(screenLat)).add(new THREE.Vector3(0, STATION_PLATFORM_H + bodyH * 0.68, 0));
+  screen.rotation.y = yaw + (sign > 0 ? 0 : Math.PI);
+  g.add(screen);
+  // Small flat top cap so the silhouette reads as a machine, not a slab.
+  const cap = new THREE.Mesh(
+    roundedBoxGeo(bodyW * 1.05, 0.06, bodyD * 1.05, 0.025),
+    new THREE.MeshStandardMaterial({ color: 0x1a2a3a, roughness: 0.4, metalness: 0.5 })
+  );
+  cap.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat - sign * 0.3)).add(new THREE.Vector3(0, STATION_PLATFORM_H + bodyH + 0.03, 0));
+  cap.rotation.y = yaw;
+  g.add(cap);
+  return g;
+}
+
+// Footbridge — pedestrian overpass spanning both running tracks with
+// staircases dropping to the left and right platforms. Renders only when
+// `s.footbridge === true`. Walkway sits above the OHLE contact wire
+// (y ≈ 5.3 m above rail head) at the platform end, with parapet rails
+// and a chunky structure deck. Stairs use lookAt() to orient cleanly
+// between platform top and walkway corner.
+function buildFootbridge(s, halfKm){
+  const g = new THREE.Group();
+  const km = min(s.km + halfKm * 0.55, ROUTE.totalKm - 0.001);
+  const f = trackFrame(km);
+  const yaw = Math.atan2(-f.t.x, -f.t.z);
+  const walkwayY = STATION_PLATFORM_H + 6.4;     // clears the contact wire at ~5.3
+  const walkwayW = TRACK_GAUGE_OFFSET + 2 * (1.8 + 3.5) + 2.6;  // ~17.3 m wide
+  const walkwayD = 2.2;
+  const walkwayT = 0.28;
+  const slabMat = new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness: 0.65, metalness: 0.3 });
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x404850, roughness: 0.6, metalness: 0.6 });
+  // ---- Walkway deck ----
+  const deck = new THREE.Mesh(roundedBoxGeo(walkwayW, walkwayT, walkwayD, 0.05), slabMat);
+  deck.position.copy(f.p).add(f.r.clone().multiplyScalar(TRACK_GAUGE_OFFSET / 2)).add(new THREE.Vector3(0, walkwayY, 0));
+  deck.rotation.y = yaw;
+  g.add(deck);
+  // ---- Parapet rails along the deck (front + back) ----
+  for (const dSign of [-1, 1]){
+    const rail = new THREE.Mesh(roundedBoxGeo(walkwayW, 0.08, 0.08, 0.025), railMat);
+    rail.position.copy(deck.position).add(new THREE.Vector3(f.t.x * dSign * walkwayD * 0.46, 0.55, f.t.z * dSign * walkwayD * 0.46));
+    rail.rotation.y = yaw;
+    g.add(rail);
+    // Vertical balusters every metre along each rail
+    const postGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.95, 6);
+    const balN = max(6, floor(walkwayW / 1.4));
+    for (let i = 0; i < balN; i++){
+      const u = (i + 0.5) / balN - 0.5;       // -0.5 .. +0.5
+      const x = u * walkwayW;
+      const post = new THREE.Mesh(postGeo, railMat);
+      // Build a local offset (x, 0, dSign * walkwayD * 0.46) then rotate by yaw and add to deck.position
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const localZ = dSign * walkwayD * 0.46;
+      const wx = x * cy + localZ * sy;
+      const wz = -x * sy + localZ * cy;
+      post.position.copy(deck.position).add(new THREE.Vector3(wx, 0.07, wz));
+      g.add(post);
+    }
+  }
+  // ---- Staircases — one to the left primary platform, one to the right ----
+  const stairW = 1.6, stairT = 0.20;
+  const stairMat = new THREE.MeshStandardMaterial({ color: 0x707880, roughness: 0.7, metalness: 0.3 });
+  const stairConfigs = [
+    { sgn: -1, platCenterLat: -3.55, walkwayEdgeLat: -(walkwayW / 2) + 0.5 + TRACK_GAUGE_OFFSET / 2 },
+    { sgn: +1, platCenterLat: TRACK_GAUGE_OFFSET + 3.55, walkwayEdgeLat: (walkwayW / 2) - 0.5 + TRACK_GAUGE_OFFSET / 2 },
+  ];
+  for (const cfg of stairConfigs){
+    const startPos = f.p.clone().add(f.r.clone().multiplyScalar(cfg.platCenterLat)).add(new THREE.Vector3(0, STATION_PLATFORM_H + 0.05, 0));
+    const endPos   = f.p.clone().add(f.r.clone().multiplyScalar(cfg.walkwayEdgeLat)).add(new THREE.Vector3(0, walkwayY - walkwayT / 2, 0));
+    const dir = endPos.clone().sub(startPos);
+    const len = dir.length();
+    const mid = startPos.clone().add(endPos).multiplyScalar(0.5);
+    const stair = new THREE.Mesh(roundedBoxGeo(stairW, stairT, len, 0.04), stairMat);
+    stair.position.copy(mid);
+    // lookAt orients local -Z toward endPos; the stair length is along local Z.
+    stair.lookAt(endPos);
+    g.add(stair);
+    // Handrails alongside the stair — two thin tubes, one each side.
+    for (const sSide of [-1, 1]){
+      const handrail = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, len * 0.96, 6),
+        railMat
+      );
+      // Position above the stair surface, offset laterally by ±stairW/2
+      // Use the stair's local frame: after lookAt, local +X is the right of
+      // the stair, +Y is up perpendicular to the stair, -Z faces endPos.
+      // Build the handrail in the stair's local frame, then transform.
+      handrail.position.copy(mid);
+      handrail.lookAt(endPos);
+      // Slide along stair's X by ±stairW/2 and lift Y by handrail height.
+      // After lookAt, the stair's local axes are accessible via its matrix.
+      const xAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(stair.quaternion);
+      const yAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(stair.quaternion);
+      handrail.position.add(xAxis.multiplyScalar(sSide * stairW * 0.48)).add(yAxis.multiplyScalar(stairT * 0.5 + 0.5));
+      // The cylinder's height is along its local Y by default. After lookAt,
+      // we want it to lie along the stair's length axis (local Z). Rotate 90°
+      // around X to swing the cylinder onto Z.
+      handrail.rotateX(Math.PI / 2);
+      g.add(handrail);
     }
   }
   return g;
