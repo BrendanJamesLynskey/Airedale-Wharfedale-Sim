@@ -4859,6 +4859,14 @@ const GS = {
   timeScale: 1.0,            // sim-time multiplier (1× normal, 2× when '2× speed' checkbox is on)
   train: TRAINS.t333,        // active rolling-stock spec (swapped by menu before beginService)
   map: MAPS.airedale,        // active route spec (swapped by menu before beginService)
+  // Free-cam mode — toggled with C. While on, the camera detaches from the
+  // cab and flies freely under WASD / Space / LCtrl; train controls (notch,
+  // AWS, DSD, etc.) are blocked. Cab and train continue along the route so
+  // the user can watch the unit from outside.
+  freeCam: false,
+  freeCamPos: new THREE.Vector3(0, 0, 0),
+  freeCamYaw: 0,
+  freeCamPitch: 0,
 };
 const DEMO_DECEL = 0.55;       // m/s², autopilot brake target — well under maxBrake
 
@@ -4887,10 +4895,43 @@ function bumpNotch(delta){
 let leverFlashT = 0;
 function flashLever(){ leverFlashT = 0.25; }   // brief highlight on lever change
 
+// Free-cam — detach the camera from camRig so we can position it freely in
+// world space, while leaving camRig (and therefore the cab and the train)
+// at the train's position so the user can watch the unit run.
+function enterFreeCam(){
+  GS.freeCam = true;
+  const wp = new THREE.Vector3();
+  camera.getWorldPosition(wp);
+  GS.freeCamPos.copy(wp);
+  // Seed yaw / pitch from the cab camera's current world orientation so
+  // entering free-cam doesn't snap the view to a different facing.
+  const wq = new THREE.Quaternion();
+  camera.getWorldQuaternion(wq);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(wq);
+  GS.freeCamYaw   = Math.atan2(-fwd.x, -fwd.z);
+  GS.freeCamPitch = Math.asin(Math.max(-1, Math.min(1, fwd.y)));
+  scene.add(camera);                       // reparent to scene so position/rotation are world-space
+  camera.rotation.order = 'YXZ';
+  showMsg('FREE CAM — WASD / SPACE / LCTRL · drag to look · C to return', 'info', 4.0);
+}
+function exitFreeCam(){
+  GS.freeCam = false;
+  camRig.add(camera);                      // reparent back under camRig for the cab follow
+  camera.position.set(0, 0, 0);
+  showMsg('CAB CAM', 'ok', 1.2);
+}
+
 window.addEventListener('keydown', e => {
   if (e.repeat) return;            // we manage repeat ourselves
   KEYS[e.code] = true;
   if (!GS.running) return;
+  // KeyC toggles free-cam regardless of mode.
+  if (e.code === 'KeyC') { if (GS.freeCam) exitFreeCam(); else enterFreeCam(); return; }
+  // Pause is always available.
+  if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); return; }
+  // All other train controls are silenced in free-cam so WASD doesn't drive
+  // the notch while the camera is flying.
+  if (GS.freeCam) return;
   if (e.code in NOTCH_KEYS) { bumpNotch(NOTCH_KEYS[e.code]); notchHoldTimer = 0.30; }
   if (e.code === 'KeyQ') awsReset();
   if (e.code === 'KeyE') dsdReset();
@@ -4903,11 +4944,30 @@ window.addEventListener('keydown', e => {
     if (GS.dra && GS.notch > 0) { GS.notch = 0; flashLever(); }
     showMsg(GS.dra ? 'DRA SET — TRACTION INHIBITED' : 'DRA CANCELLED', GS.dra ? 'warn' : 'ok', 1.0);
   }
-  if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   if (e.code === 'Space') { GS.notch = -6; flashLever(); }
   if (e.code === 'KeyH') { GS.horn = true; GS.hornHigh = true; }
   if (e.code === 'KeyJ') { GS.horn = true; GS.hornHigh = false; }
 });
+
+// Free-cam movement — WASD planar (along camera-local forward / right),
+// Space up, LCtrl down, LShift triples the speed for fast traversal.
+function freeCamStep(dt){
+  if (!GS.freeCam) return;
+  const fast = !!(KEYS['ShiftLeft'] || KEYS['ShiftRight']);
+  const speed = (fast ? 90 : 25);
+  const cy = Math.cos(GS.freeCamYaw), sy = Math.sin(GS.freeCamYaw);
+  // Horizontal forward / right (ignore pitch so W slides along the ground
+  // when looking down, the FPS convention).
+  const fwd  = new THREE.Vector3(-sy, 0, -cy);
+  const rgt  = new THREE.Vector3( cy, 0, -sy);
+  const up   = new THREE.Vector3(0, 1, 0);
+  if (KEYS['KeyW']) GS.freeCamPos.addScaledVector(fwd, speed * dt);
+  if (KEYS['KeyS']) GS.freeCamPos.addScaledVector(fwd, -speed * dt);
+  if (KEYS['KeyA']) GS.freeCamPos.addScaledVector(rgt, -speed * dt);
+  if (KEYS['KeyD']) GS.freeCamPos.addScaledVector(rgt,  speed * dt);
+  if (KEYS['Space']) GS.freeCamPos.addScaledVector(up,  speed * dt);
+  if (KEYS['ControlLeft'] || KEYS['ControlRight']) GS.freeCamPos.addScaledVector(up, -speed * dt);
+}
 window.addEventListener('keyup', e => {
   KEYS[e.code] = false;
   if (e.code === 'KeyH' || e.code === 'KeyJ') GS.horn = false;
@@ -4915,6 +4975,7 @@ window.addEventListener('keyup', e => {
 
 let notchHoldTimer = 0;
 function processHeldKeys(dt){
+  if (GS.freeCam) return;            // WASD belongs to the camera in free-cam
   notchHoldTimer -= dt;
   if (notchHoldTimer > 0) return;
   let delta = 0;
@@ -5334,10 +5395,19 @@ let lookYaw = 0, lookPitch = 0;
 canvas.addEventListener('pointermove', e=>{
   if (!GS.running) return;
   if (e.buttons === 1 || e.pointerType === 'touch'){
-    lookYaw   -= e.movementX * 0.002;
-    lookPitch -= e.movementY * 0.002;
-    lookYaw   = clamp(lookYaw, -0.8, 0.8);
-    lookPitch = clamp(lookPitch, -0.4, 0.4);
+    if (GS.freeCam){
+      // Free-cam look uses world yaw/pitch with a wider clamp on pitch so
+      // the user can look straight up / down. Sensitivity slightly higher
+      // since there's no in-cab head clamp.
+      GS.freeCamYaw   -= e.movementX * 0.003;
+      GS.freeCamPitch -= e.movementY * 0.003;
+      GS.freeCamPitch = clamp(GS.freeCamPitch, -1.45, 1.45);
+    } else {
+      lookYaw   -= e.movementX * 0.002;
+      lookPitch -= e.movementY * 0.002;
+      lookYaw   = clamp(lookYaw, -0.8, 0.8);
+      lookPitch = clamp(lookPitch, -0.4, 0.4);
+    }
   }
 });
 
@@ -5373,12 +5443,20 @@ function placeCamera(){
   // camera's -Z is +tangent (forward along the track). Subtract f.t from the JUDDERED
   // rig position so the look direction stays parallel to f.t (no judder-induced tilt).
   camRig.lookAt(camRig.position.clone().sub(f.t));
-  // Camera local rotation (player look) layered on top
-  camera.rotation.set(lookPitch, lookYaw, 0);
   // Cab follows the rig directly (so the cab judders together with the camera —
   // the WORLD appears to shake from the driver's POV, which is the correct cue).
   cabGroup.position.copy(camRig.position);
   cabGroup.quaternion.copy(camRig.quaternion);
+  if (GS.freeCam){
+    // Free-cam: camera lives directly under the scene, positioned and
+    // rotated in world space from GS.freeCam* state. Cab still rides
+    // camRig (above) so the user can watch the train run.
+    camera.position.copy(GS.freeCamPos);
+    camera.rotation.set(GS.freeCamPitch, GS.freeCamYaw, 0);
+  } else {
+    // Camera local rotation (player look) layered on top
+    camera.rotation.set(lookPitch, lookYaw, 0);
+  }
   // Sky tracks camera world position (so we never leave the dome) but keeps world rotation
   camera.getWorldPosition(skyMesh.position);
   // FOV widens with speed — softened toward target so accel/decel transitions feel smooth.
@@ -5419,6 +5497,7 @@ function loop(){
 
     if (GS.demo) demoAutopilot();
     else processHeldKeys(dt);
+    freeCamStep(dt);                  // no-op when GS.freeCam is false
     physicsStep(simDt);
     updateStations(simDt);
     updateSignals(GS.km);

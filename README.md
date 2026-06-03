@@ -62,6 +62,7 @@ the platform). Halt with the cab beside the marker for a perfect stop.
 | V | Wipers |
 | P / Esc | Pause |
 | F + drag | Look around the cab |
+| C | Toggle free cam (WASD / Space / LCtrl to move, LShift = fast, drag to look) |
 
 On mobile, on-screen pads provide power, brake, horn, AWS reset and pause.
 
