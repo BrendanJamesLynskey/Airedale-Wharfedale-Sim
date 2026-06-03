@@ -1406,26 +1406,113 @@ function buildStations(){
         pg.add(head);
       }
 
-      // ---- Shelter (small canopy) at station centre — halts skip this ----
+      // ---- Shelter at station centre — halts skip this entirely. Style
+      // picks the visual: 'modern' (default slab + slim metal posts),
+      // 'victorian' (ornate dark-green canopy + cast-iron posts + brick
+      // back wall), or 'rural' (small wooden lean-to). ----
       if (!isHalt){
         const f0 = trackFrame(s.km);
         const yawMid = Math.atan2(-f0.t.x, -f0.t.z);
-        const shelterLen = min(platLen * 0.4, 16);
-        const shelter = new THREE.Mesh(
-          new THREE.BoxGeometry(platformW * 0.8, 0.20, shelterLen),
-          new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness:0.7, metalness:0.3 })
-        );
-        shelter.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 2.6, 0));
-        shelter.rotation.y = yawMid;
-        pg.add(shelter);
-        const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
-        [-1,1].forEach(dx => [-1,1].forEach(dz => {
-          const pst = new THREE.Mesh(postGeo, lampMat);
-          const km = s.km + dz * min(platLen*0.18, 7) / KM;
-          const f = trackFrame(km);
-          pst.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat + dx * platformW * 0.3)).add(new THREE.Vector3(0, platformH + 1.3, 0));
-          pg.add(pst);
-        }));
+        const shelterStyle = String(s.style || 'modern').toLowerCase();
+        if (shelterStyle === 'victorian'){
+          // Long ornate canopy in dark forest green with cast-iron columns
+          // and a small brick back wall on the cess side.
+          const shelterLenV = min(platLen * 0.55, 22);
+          const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1f3a2a, roughness: 0.6, metalness: 0.2 });
+          const canopy = new THREE.Mesh(
+            new THREE.BoxGeometry(platformW * 1.05, 0.18, shelterLenV),
+            canopyMat
+          );
+          canopy.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 3.0, 0));
+          canopy.rotation.y = yawMid;
+          pg.add(canopy);
+          // Decorative rim along each long edge — slightly darker green
+          const rimMat = new THREE.MeshStandardMaterial({ color: 0x162820, roughness: 0.55 });
+          [-1, 1].forEach(latSign => {
+            const rim = new THREE.Mesh(
+              new THREE.BoxGeometry(0.12, 0.30, shelterLenV),
+              rimMat
+            );
+            rim.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat + latSign * platformW * 0.52)).add(new THREE.Vector3(0, platformH + 2.95, 0));
+            rim.rotation.y = yawMid;
+            pg.add(rim);
+          });
+          // Brick back wall on the cess (track-facing) side
+          const brickMat = new THREE.MeshStandardMaterial({ color: 0x8b5a48, roughness: 0.92 });
+          const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(0.22, 2.5, shelterLenV * 0.9),
+            brickMat
+          );
+          backWall.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat - sign * platformW * 0.42)).add(new THREE.Vector3(0, platformH + 1.45, 0));
+          backWall.rotation.y = yawMid;
+          pg.add(backWall);
+          // Cast-iron posts (chunky, dark green) with brass finial caps
+          const postGeoV = new THREE.CylinderGeometry(0.10, 0.13, 3.0, 12);
+          const postMatV = new THREE.MeshStandardMaterial({ color: 0x1f3a2a, roughness: 0.55, metalness: 0.4 });
+          const finialGeo = new THREE.SphereGeometry(0.14, 10, 6);
+          const finialMat = new THREE.MeshStandardMaterial({ color: 0x8b6a3a, roughness: 0.5, metalness: 0.7 });
+          [-1, 1].forEach(dx => [-1, 1].forEach(dz => {
+            const km = s.km + dz * min(platLen*0.22, 8) / KM;
+            const f = trackFrame(km);
+            const px = centreLat + dx * platformW * 0.36;
+            const post = new THREE.Mesh(postGeoV, postMatV);
+            post.position.copy(f.p).add(f.r.clone().multiplyScalar(px)).add(new THREE.Vector3(0, platformH + 1.5, 0));
+            pg.add(post);
+            const finial = new THREE.Mesh(finialGeo, finialMat);
+            finial.position.copy(f.p).add(f.r.clone().multiplyScalar(px)).add(new THREE.Vector3(0, platformH + 3.13, 0));
+            pg.add(finial);
+          }));
+        } else if (shelterStyle === 'rural'){
+          // Small wooden lean-to — minimal timber shelter, dark stained
+          // pine; the kind of thing on a request stop in the Dales.
+          const shelterLenR = min(platLen * 0.25, 8);
+          const woodMat = new THREE.MeshStandardMaterial({ color: 0x5a3e22, roughness: 0.9 });
+          const roofMat = new THREE.MeshStandardMaterial({ color: 0x3a2820, roughness: 0.85 });
+          // Slightly tilted slab roof — gives a sense of a pitched lean-to
+          const roof = new THREE.Mesh(
+            new THREE.BoxGeometry(platformW * 0.7, 0.14, shelterLenR),
+            roofMat
+          );
+          roof.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 2.3, 0));
+          roof.rotation.y = yawMid;
+          roof.rotation.z = 0.16 * sign;     // tilt downward toward the track
+          pg.add(roof);
+          // Back panel — a plank wall on the cess side
+          const backPanel = new THREE.Mesh(
+            new THREE.BoxGeometry(0.10, 1.8, shelterLenR * 0.95),
+            woodMat
+          );
+          backPanel.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat - sign * platformW * 0.36)).add(new THREE.Vector3(0, platformH + 1.2, 0));
+          backPanel.rotation.y = yawMid;
+          pg.add(backPanel);
+          // Chunky wooden corner posts
+          const postGeoR = new THREE.BoxGeometry(0.12, 2.2, 0.12);
+          [-1, 1].forEach(dx => [-1, 1].forEach(dz => {
+            const km = s.km + dz * min(platLen*0.12, 4) / KM;
+            const f = trackFrame(km);
+            const post = new THREE.Mesh(postGeoR, woodMat);
+            post.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat + dx * platformW * 0.28)).add(new THREE.Vector3(0, platformH + 1.1, 0));
+            pg.add(post);
+          }));
+        } else {
+          // Modern (default) — grey-blue slab with slim metal posts.
+          const shelterLen = min(platLen * 0.4, 16);
+          const shelter = new THREE.Mesh(
+            new THREE.BoxGeometry(platformW * 0.8, 0.20, shelterLen),
+            new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness:0.7, metalness:0.3 })
+          );
+          shelter.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 2.6, 0));
+          shelter.rotation.y = yawMid;
+          pg.add(shelter);
+          const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
+          [-1,1].forEach(dx => [-1,1].forEach(dz => {
+            const pst = new THREE.Mesh(postGeo, lampMat);
+            const km = s.km + dz * min(platLen*0.18, 7) / KM;
+            const f = trackFrame(km);
+            pst.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat + dx * platformW * 0.3)).add(new THREE.Vector3(0, platformH + 1.3, 0));
+            pg.add(pst);
+          }));
+        }
       }
 
       // ---- Name boards ----
@@ -1559,6 +1646,41 @@ function buildStations(){
         board.rotation.y = yaw + (sign > 0 ? PI : 0);
         pg.add(board);
       });
+      // ---- Wing track: sleepers + two segmented rails alongside the wing
+      // platform, between this wing and the next platform inward. Only
+      // renders for the platform length (no through-running). Makes the
+      // wing read as an actual extra platform face, not a slab floating
+      // in nothing. ----
+      const wingRailCenter = centreLat - sign * (platformW / 2 + 2);
+      const railHalfGauge = 0.7175;
+      const sleeperCount = max(8, floor(platLen / 0.65));
+      const sleeperGeoW = new THREE.BoxGeometry(2.5, 0.15, 0.25);
+      const sleeperMatW = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.9 });
+      for (let si = 0; si < sleeperCount; si++){
+        const km = s.km + (-halfKm) + ((si + 0.5) / sleeperCount) * (halfKm * 2);
+        const f = trackFrame(km);
+        const yawSp = Math.atan2(-f.t.x, -f.t.z);
+        const sleeper = new THREE.Mesh(sleeperGeoW, sleeperMatW);
+        sleeper.position.copy(f.p).add(f.r.clone().multiplyScalar(wingRailCenter)).add(new THREE.Vector3(0, -0.72, 0));
+        sleeper.rotation.y = yawSp;
+        pg.add(sleeper);
+      }
+      const railSegs = max(4, ceil(platLen / 5));
+      const railSegLen = (platLen + 0.1) / railSegs;
+      const railGeoW = new THREE.BoxGeometry(0.07, 0.10, railSegLen + 0.05);
+      const railMatW = new THREE.MeshStandardMaterial({ color: 0x808890, metalness: 0.7, roughness: 0.3 });
+      for (const rsgn of [-1, 1]){
+        const railLat = wingRailCenter + rsgn * railHalfGauge;
+        for (let i = 0; i < railSegs; i++){
+          const km = s.km + (-halfKm) + ((i + 0.5) / railSegs) * (halfKm * 2);
+          const f = trackFrame(km);
+          const yaw = Math.atan2(-f.t.x, -f.t.z);
+          const rail = new THREE.Mesh(railGeoW, railMatW);
+          rail.position.copy(f.p).add(f.r.clone().multiplyScalar(railLat)).add(new THREE.Vector3(0, -0.62, 0));
+          rail.rotation.y = yaw;
+          pg.add(rail);
+        }
+      }
       return pg;
     }
 
@@ -1583,8 +1705,115 @@ function buildStations(){
         group.add(wingAt(TRACK_GAUGE_OFFSET + 3.55 + WING_GAP * wingsR, +1, nextLabel++));
       }
     }
+    // Terminus buffer stop — only when this station is also the route-end.
+    // Sits just past the platform end, blocking both running tracks with a
+    // concrete base and two red/white striped uprights.
+    if (stationType === 'terminus' && abs(s.km - ROUTE.totalKm) < 0.05){
+      group.add(buildBufferStop(s, halfKm));
+    }
+    // Junction stub — a 60 m branch of rails going off at 30° from the
+    // main tangent, on the side opposite the primary platform.
+    if (stationType === 'junction'){
+      group.add(buildJunctionStub(s));
+    }
   }
   return group;
+}
+
+// Terminus buffer stop — concrete base + two red/white striped uprights,
+// straddling both running tracks at the platform end. Only called when the
+// station is both `type: 'terminus'` AND at the last station of the route
+// (km === totalKm).
+function buildBufferStop(s, halfKm){
+  const g = new THREE.Group();
+  const km = min(s.km + halfKm + 0.003, ROUTE.totalKm - 0.001);
+  const f = trackFrame(km);
+  const yaw = Math.atan2(-f.t.x, -f.t.z);
+  const baseW = TRACK_GAUGE_OFFSET + 3.5;
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(baseW, 0.5, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x9a958e, roughness: 0.95 })
+  );
+  base.position.copy(f.p).add(f.r.clone().multiplyScalar(TRACK_GAUGE_OFFSET / 2)).add(new THREE.Vector3(0, 0.25, 0));
+  base.rotation.y = yaw;
+  g.add(base);
+  // Red/white candy-stripe upright — canvas texture so the pattern is sharp
+  // at any zoom and ships with no asset file.
+  const stripeTex = (() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 256;
+    const ctx = c.getContext('2d');
+    for (let y = 0; y < 256; y += 32){
+      ctx.fillStyle = ((y / 32) % 2 === 0) ? '#cc2020' : '#f0f0f0';
+      ctx.fillRect(0, y, 64, 32);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const stripeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.6 });
+  [0, TRACK_GAUGE_OFFSET].forEach(trackCenter => {
+    const upright = new THREE.Mesh(
+      new THREE.BoxGeometry(0.6, 1.6, 0.4),
+      stripeMat
+    );
+    upright.position.copy(f.p).add(f.r.clone().multiplyScalar(trackCenter)).add(new THREE.Vector3(0, 1.3, 0));
+    upright.rotation.y = yaw;
+    g.add(upright);
+  });
+  return g;
+}
+
+// Junction branch stub — 60 m of rails (sleepers + two segmented rail boxes)
+// curving off the main line at 30° on the side opposite the platform. Purely
+// visual; the player can't actually take the branch.
+function buildJunctionStub(s){
+  const g = new THREE.Group();
+  // Branch on the side opposite the platform (so it's clearly visible).
+  const branchSign = (s.side === 'L') ? +1 : -1;
+  const branchAngle = (PI / 6) * branchSign;     // 30°
+  const f = trackFrame(s.km);
+  const ct = cos(branchAngle), st = sin(branchAngle);
+  // Rotate (f.t.x, f.t.z) by branchAngle around Y. Standard 2D rotation in
+  // the XZ plane, accounting for the sign of branchAngle so left vs right
+  // works symmetrically.
+  const tx =  f.t.x * ct + f.t.z * st;
+  const tz = -f.t.x * st + f.t.z * ct;
+  const tlen = Math.hypot(tx, tz) || 1;
+  const ux = tx / tlen, uz = tz / tlen;
+  const px = -uz, pz = ux;       // perpendicular for rail gauge
+  const LEN = 60;
+  // Sleepers
+  const sleeperN = 24;
+  const sleeperGeo = new THREE.BoxGeometry(2.5, 0.15, 0.25);
+  const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.9 });
+  const stubYaw = Math.atan2(-ux, -uz);
+  for (let i = 1; i < sleeperN; i++){
+    const d = (i / sleeperN) * LEN;
+    const sleeper = new THREE.Mesh(sleeperGeo, sleeperMat);
+    sleeper.position.set(f.p.x + ux * d, f.p.y - 0.72, f.p.z + uz * d);
+    sleeper.rotation.y = stubYaw;
+    g.add(sleeper);
+  }
+  // Rails — segmented boxes following the stub direction
+  const railSegs = 12;
+  const railSegLen = LEN / railSegs;
+  const railGeo = new THREE.BoxGeometry(0.07, 0.10, railSegLen + 0.05);
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x808890, metalness: 0.7, roughness: 0.3 });
+  const railHalfGauge = 0.7175;
+  for (const rsgn of [-1, 1]){
+    for (let i = 0; i < railSegs; i++){
+      const d = (i + 0.5) / railSegs * LEN;
+      const rail = new THREE.Mesh(railGeo, railMat);
+      rail.position.set(
+        f.p.x + ux * d + px * rsgn * railHalfGauge,
+        f.p.y - 0.62,
+        f.p.z + uz * d + pz * rsgn * railHalfGauge
+      );
+      rail.rotation.y = stubYaw;
+      g.add(rail);
+    }
+  }
+  return g;
 }
 
 // ============================================================
