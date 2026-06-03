@@ -17,6 +17,7 @@ physics, full cab interior and audio signature:
 |------|------|--------|------|-----------|
 | **Class 333** | 4 | 96.4 m | 167 t | Classic CAF cab — analogue speedometer, duplex BC/BP pressure gauge, MR pressure gauge, paperwork shelf, monochrome TMS screen |
 | **Class 331/0** | 3 | 72.0 m | 120 t | Modern Civity cab — flat-panel TMS / large central DMI / ETCS DMI, CCTV monitor strip above the windscreen, illuminated pushbuttons, lighter pearl-grey palette |
+| **Class 700/0** | 8 | 162.6 m | 388 t | Siemens Desiro City — reuses the 331's flat-panel cab geometry, relabelled to **CLASS 700/0 DMI**, with a Bombardier MITRAC IGBT inverter whine (350 Hz → 1400 Hz sweep, cleaner and higher-pitched than the 331). Punchier acceleration (1.0 m/s²) and stronger service brake (1.2 m/s²). Note: at 162.6 m the train is longer than several Airedale platforms (Steeton, Cononley, Crossflatts) — fine to run but won't fit cleanly at the stop markers. |
 
 Both share the same UK-standard safety kit (AWS sunflower, DRA mushroom, TPWS+
 unit, emergency brake plunger, GSM-R cab radio) and the same master controller

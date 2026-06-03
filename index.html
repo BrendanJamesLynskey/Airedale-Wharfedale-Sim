@@ -101,6 +101,9 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
       <button class="unitBtn" data-train="t331" style="flex:1;min-width:140px;max-width:220px;width:auto;padding:0.7rem 0.4rem;font-size:0.78rem;line-height:1.4;">
         CLASS 331/0<br><span style="font-size:0.62rem;color:rgba(180,210,235,0.55);letter-spacing:0.2em;">CAF · 3-CAR · 100MPH</span>
       </button>
+      <button class="unitBtn" data-train="t700" style="flex:1;min-width:140px;max-width:220px;width:auto;padding:0.7rem 0.4rem;font-size:0.78rem;line-height:1.4;">
+        CLASS 700/0<br><span style="font-size:0.62rem;color:rgba(180,210,235,0.55);letter-spacing:0.2em;">SIEMENS · 8-CAR · 100MPH</span>
+      </button>
     </div>
     <label style="display:flex;align-items:center;justify-content:center;gap:0.6em;margin-bottom:0.7rem;font-size:0.78rem;letter-spacing:0.18em;color:rgba(180,210,235,0.75);cursor:pointer;text-transform:uppercase;">
       <input id="fastChk" type="checkbox" style="width:1.1em;height:1.1em;accent-color:#5cc8ff;cursor:pointer;">
@@ -417,6 +420,38 @@ const TRAINS = {
       tractionFilterPerMs: 80,
       tractionFilterBase: 1400,
       tractionGainScale: 0.14,
+    },
+  },
+  t700: {
+    key: 't700',
+    name: 'Class 700/0',
+    builder: 'Siemens',
+    cars: 8,
+    lengthM: 162.6,
+    massT: 388,
+    maxMph: 100,
+    maxAccel: 1.00,                    // Desiro City — punchier than the Civity pair
+    maxBrake: 1.20,
+    emergBrake: 1.50,
+    powerNotches: 5,
+    brakeNotches: 6,
+    davisA: 0.85,  davisB: 0.011,  davisC: 0.00016,
+    cabBuilder: 'buildCab331',         // modern flat-panel cab — reused; tmsLabel below relabels
+    tmsLabel: 'CLASS 700/0  DMI',
+    speedoUnits: 'CLASS 700/0',
+    // Audio: Siemens Desiro City — Bombardier MITRAC IGBT drive sits even
+    // higher than the 331's whine, sweeping from ~350 Hz off the mark up
+    // past ~1400 Hz at line speed. Cleaner, more "synthesised" tone with
+    // the harmonic structure of a modern VVVF inverter.
+    audio: {
+      tractionOsc1Type: 'sawtooth', tractionOsc1BaseHz: 350,
+      tractionOsc2Type: 'square',   tractionOsc2BaseHz: 525,
+      tractionFilterCutoff: 3400,
+      tractionPitchPerMs: 20.0,
+      tractionOsc2Ratio: 1.5,
+      tractionFilterPerMs: 85,
+      tractionFilterBase: 1500,
+      tractionGainScale: 0.13,
     },
   },
 };
@@ -1694,21 +1729,25 @@ function buildStations(){
       const wingRailCenter = centreLat - sign * (platformW / 2 + 2);
       const railHalfGauge = 0.7175;
       const sleeperCount = max(8, floor(platLen / 0.65));
-      const sleeperGeoW = new THREE.BoxGeometry(2.5, 0.15, 0.25);
+      const sleeperGeoW = new THREE.BoxGeometry(2.5, 0.18, 0.22);
       const sleeperMatW = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.9 });
+      // Y offsets match the main track in buildTrack(): sleepers sit
+      // at trackbed −0.20 m, rail heads at −0.10 m. Previously the wing
+      // track was 50 cm further down, which put both meshes under the
+      // grass so the wing platforms looked like floating slabs.
       for (let si = 0; si < sleeperCount; si++){
         const km = s.km + (-halfKm) + ((si + 0.5) / sleeperCount) * (halfKm * 2);
         const f = trackFrame(km);
         const yawSp = Math.atan2(-f.t.x, -f.t.z);
         const sleeper = new THREE.Mesh(sleeperGeoW, sleeperMatW);
-        sleeper.position.copy(f.p).add(f.r.clone().multiplyScalar(wingRailCenter)).add(new THREE.Vector3(0, -0.72, 0));
+        sleeper.position.copy(f.p).add(f.r.clone().multiplyScalar(wingRailCenter)).add(new THREE.Vector3(0, -0.20, 0));
         sleeper.rotation.y = yawSp;
         pg.add(sleeper);
       }
       const railSegs = max(4, ceil(platLen / 5));
       const railSegLen = (platLen + 0.1) / railSegs;
-      const railGeoW = new THREE.BoxGeometry(0.07, 0.10, railSegLen + 0.05);
-      const railMatW = new THREE.MeshStandardMaterial({ color: 0x808890, metalness: 0.7, roughness: 0.3 });
+      const railGeoW = new THREE.BoxGeometry(0.07, 0.13, railSegLen + 0.05);
+      const railMatW = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, metalness: 0.85, roughness: 0.35 });
       for (const rsgn of [-1, 1]){
         const railLat = wingRailCenter + rsgn * railHalfGauge;
         for (let i = 0; i < railSegs; i++){
@@ -1716,7 +1755,7 @@ function buildStations(){
           const f = trackFrame(km);
           const yaw = Math.atan2(-f.t.x, -f.t.z);
           const rail = new THREE.Mesh(railGeoW, railMatW);
-          rail.position.copy(f.p).add(f.r.clone().multiplyScalar(railLat)).add(new THREE.Vector3(0, -0.62, 0));
+          rail.position.copy(f.p).add(f.r.clone().multiplyScalar(railLat)).add(new THREE.Vector3(0, -0.04, 0));
           rail.rotation.y = yaw;
           pg.add(rail);
         }
