@@ -631,6 +631,10 @@ function nextStation(km){
 // (north side). Returns null past the route ends so the mesh can stop cleanly.
 function riverLatAt(km){
   const path = ROUTE.riverPath;
+  // Empty riverPath is valid for user-defined maps that have no river /
+  // no coast to draw. Return zero so buildRiver / buildCoast see a flat
+  // baseline they can no-op on.
+  if (!path || !path.length) return 0;
   if (km <= path[0].km) return path[0].lat;
   if (km >= path[path.length-1].km) return path[path.length-1].lat;
   for (let i = 0; i < path.length - 1; i++){
@@ -995,7 +999,9 @@ function buildCoast(){
   const totalKm = ROUTE.totalKm;
   const segs = floor(totalKm / stepKm);
   const COAST_MIN = 180, COAST_MAX = 600;     // visible-band clamps
-  const SAND_W = 36, SEA_W = 8000, SEA_DROP = 25;
+  const SAND_INNER = 30;                       // sand inner edge — just past the ballast shoulder
+  const SAND_LIFT  = 0.15;                     // tiny lift above grass so sand draws over it
+  const SEA_W = 8000, SEA_DROP = 25;
   let avgLat = 1;     // default to south if no riverPath
   if (ROUTE.riverPath && ROUTE.riverPath.length){
     let s = 0;
@@ -1007,6 +1013,17 @@ function buildCoast(){
     const raw = (ROUTE.riverPath && ROUTE.riverPath.length) ? abs(riverLatAt(km)) : 300;
     return clamp(raw, COAST_MIN, COAST_MAX);
   }
+  // Mirror the grass-undulation formula from buildTerrain so the sand
+  // rides ON TOP of the grass at every (km, lat) instead of sitting at
+  // a fixed offset from trackbed Y. Earlier the sand was -0.35..-0.55 m
+  // from trackbed which the ±5.5 m terrain undulation at the coast band
+  // happily buried — the strip wasn't really hidden, it was tucked
+  // under grass peaks.
+  const TERRAIN_HALF_W = 350;
+  function grassOffsetAt(km, lat){
+    const lf = min(1, abs(lat) / TERRAIN_HALF_W);
+    return (sin(km*0.3 + lat*0.01)*3.5 + cos(km*0.7 + lat*0.005)*2.0) * lf - 0.6;
+  }
   const sandPos = [], sandIdx = [];
   const seaPos = [], seaIdx = [];
   const seaY0 = (ROUTE.stations[0]?.elev || 0) - SEA_DROP;
@@ -1014,13 +1031,17 @@ function buildCoast(){
     const km = i * stepKm;
     const f = trackFrame(km);
     const cl = coastLat(km);
-    // Sand sits at local trackbed elevation - a small offset to slip under
-    // the grass without z-fighting; the inner edge tucks slightly under the
-    // terrain so there's no visible seam at the SAND_W boundary.
-    const sandInner = f.p.clone().add(f.r.clone().multiplyScalar(SIDE * (cl - SAND_W)));
-    const sandOuter = f.p.clone().add(f.r.clone().multiplyScalar(SIDE * cl));
-    sandInner.y -= 0.35;
-    sandOuter.y -= 0.55;
+    // Sand: wide strip from just past the ballast (SAND_INNER) all the way
+    // out to the local coast position. Sits 0.15 m above the grass surface
+    // (which already undulates) so the visible side window is sand-coloured
+    // from the cab outward to the water, with no slivers of grass poking
+    // through.
+    const sandInnerLat = SIDE * SAND_INNER;
+    const sandOuterLat = SIDE * cl;
+    const sandInner = f.p.clone().add(f.r.clone().multiplyScalar(sandInnerLat));
+    const sandOuter = f.p.clone().add(f.r.clone().multiplyScalar(sandOuterLat));
+    sandInner.y += grassOffsetAt(km, sandInnerLat) + SAND_LIFT;
+    sandOuter.y += grassOffsetAt(km, sandOuterLat) + SAND_LIFT;
     sandPos.push(sandInner.x, sandInner.y, sandInner.z, sandOuter.x, sandOuter.y, sandOuter.z);
     // Sea is a flat plane well below trackbed. Use a fixed Y based on the
     // first station's elev rather than per-km local elevation — a real sea
@@ -1280,10 +1301,27 @@ function buildStations(){
   // through the sharper Aire-valley bends.
   const platformStep = 5.0;
 
+  // Wing platforms (for stations with `platforms` > 2) get pushed outward by
+  // a track-pair-plus-platform width per step, so each successive slab reads
+  // as "another track" even though the renderer doesn't currently build more
+  // running rails. WING_GAP = platform width + nominal 4 m clearance.
+  const WING_GAP = platformW + 4.0;
+
   for (const s of ROUTE.stations){
     const platLen = s.plat;
     const halfKm  = (platLen / 2) / KM;
     const segs    = max(4, ceil(platLen / platformStep));
+    // Station type — recognised values: 'halt' | 'station' | 'terminus' |
+    // 'junction'. V1 differences: halts skip the canopy/posts. Terminus and
+    // junction are stored on the station for the loader / editor but render
+    // as 'station' visually until those variants are fleshed out.
+    const stationType = String(s.type || 'station').toLowerCase();
+    const isHalt = stationType === 'halt';
+    // Platform count — 'I' arrangements default to 2, others to 1; clamp 1..6.
+    // Counts above 2 add simpler "wing" slabs further out laterally with
+    // P{n} badges on their name boards.
+    let pCount = +s.platforms || (s.side === 'I' ? 2 : 1);
+    pCount = clamp(floor(pCount), 1, 6);
 
     function platformAt(side){
       const pg = new THREE.Group();
@@ -1368,25 +1406,27 @@ function buildStations(){
         pg.add(head);
       }
 
-      // ---- Shelter (small canopy) at station centre ----
-      const f0 = trackFrame(s.km);
-      const yawMid = Math.atan2(-f0.t.x, -f0.t.z);
-      const shelterLen = min(platLen * 0.4, 16);
-      const shelter = new THREE.Mesh(
-        new THREE.BoxGeometry(platformW * 0.8, 0.20, shelterLen),
-        new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness:0.7, metalness:0.3 })
-      );
-      shelter.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 2.6, 0));
-      shelter.rotation.y = yawMid;
-      pg.add(shelter);
-      const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
-      [-1,1].forEach(dx => [-1,1].forEach(dz => {
-        const pst = new THREE.Mesh(postGeo, lampMat);
-        const km = s.km + dz * min(platLen*0.18, 7) / KM;
-        const f = trackFrame(km);
-        pst.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat + dx * platformW * 0.3)).add(new THREE.Vector3(0, platformH + 1.3, 0));
-        pg.add(pst);
-      }));
+      // ---- Shelter (small canopy) at station centre — halts skip this ----
+      if (!isHalt){
+        const f0 = trackFrame(s.km);
+        const yawMid = Math.atan2(-f0.t.x, -f0.t.z);
+        const shelterLen = min(platLen * 0.4, 16);
+        const shelter = new THREE.Mesh(
+          new THREE.BoxGeometry(platformW * 0.8, 0.20, shelterLen),
+          new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness:0.7, metalness:0.3 })
+        );
+        shelter.position.copy(f0.p).add(f0.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 2.6, 0));
+        shelter.rotation.y = yawMid;
+        pg.add(shelter);
+        const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
+        [-1,1].forEach(dx => [-1,1].forEach(dz => {
+          const pst = new THREE.Mesh(postGeo, lampMat);
+          const km = s.km + dz * min(platLen*0.18, 7) / KM;
+          const f = trackFrame(km);
+          pst.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat + dx * platformW * 0.3)).add(new THREE.Vector3(0, platformH + 1.3, 0));
+          pg.add(pst);
+        }));
+      }
 
       // ---- Name boards ----
       const nameTex = makeNameBoardTexture(s.name, s.code);
@@ -1459,11 +1499,89 @@ function buildStations(){
       return pg;
     }
 
-    if (s.side === 'I'){
+    // ---- Wing platform (used when s.platforms > 2). Renders just the
+    // concrete slab + walls + tactile + yellow line + a small "P{n}" name
+    // board. No shelter, no lamps, no stop marker — purely visual cue that
+    // this is a multi-platform station. ----
+    function wingAt(centreLat, sign, label){
+      const pg = new THREE.Group();
+      const innerLat = centreLat - sign * (platformW / 2);
+      const outerLat = centreLat + sign * (platformW / 2);
+      const yellowLat = innerLat + sign * 0.5;
+      const tactileLat = innerLat + sign * 0.2;
+      const samples = [];
+      for (let i = 0; i <= segs; i++){
+        const km = s.km + (-halfKm) + (i / segs) * (halfKm * 2);
+        samples.push(trackFrame(km));
+      }
+      function wingRibbon(latA, latB, yA, yB, mat){
+        const positions = [], uvs = [], indices = [];
+        const flip = sign > 0;
+        for (let i = 0; i < samples.length; i++){
+          const f = samples[i];
+          const a = f.p.clone().add(f.r.clone().multiplyScalar(latA)).add(new THREE.Vector3(0, yA, 0));
+          const b = f.p.clone().add(f.r.clone().multiplyScalar(latB)).add(new THREE.Vector3(0, yB, 0));
+          positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+          const v = (i / segs) * (platLen / 6);
+          uvs.push(0, v, 1, v);
+          if (i < samples.length - 1){
+            const k = i * 2;
+            if (flip) indices.push(k, k+1, k+2, k+1, k+3, k+2);
+            else      indices.push(k, k+2, k+1, k+1, k+2, k+3);
+          }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        g.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs, 2));
+        g.setIndex(indices);
+        g.computeVertexNormals();
+        return new THREE.Mesh(g, mat);
+      }
+      const concreteMat = new THREE.MeshStandardMaterial({ map: texConcrete, roughness: 0.85 });
+      pg.add(wingRibbon(innerLat, outerLat, platformH, platformH, concreteMat));
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x9d9b96, roughness: 0.95 });
+      pg.add(wingRibbon(innerLat, innerLat, 0, platformH, wallMat));
+      pg.add(wingRibbon(outerLat, outerLat, 0, platformH, wallMat));
+      const yellowMat  = new THREE.MeshBasicMaterial({ color: 0xffd23a });
+      const tactileMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
+      pg.add(wingRibbon(yellowLat - sign*0.125, yellowLat + sign*0.125, platformH + 0.005, platformH + 0.005, yellowMat));
+      pg.add(wingRibbon(tactileLat - sign*0.05, tactileLat + sign*0.05, platformH + 0.006, platformH + 0.006, tactileMat));
+      // Small name board with a "P{n}" badge in the small-code slot so the
+      // platform number reads cleanly without changing the primary signs.
+      const nameTex = makeNameBoardTexture(s.name, 'PLATFORM ' + label);
+      const nameMat = new THREE.MeshBasicMaterial({ map: nameTex });
+      [-0.15, 0.15].forEach(dz => {
+        const km = s.km + dz * platLen / KM;
+        const f = trackFrame(km);
+        const yaw = Math.atan2(-f.t.x, -f.t.z);
+        const board = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 1.0), nameMat);
+        board.position.copy(f.p).add(f.r.clone().multiplyScalar(centreLat)).add(new THREE.Vector3(0, platformH + 1.8, 0));
+        board.rotation.y = yaw + (sign > 0 ? PI : 0);
+        pg.add(board);
+      });
+      return pg;
+    }
+
+    // Primary platforms — keep the original L/R/I behaviour.
+    const hasPair = s.side === 'I' || pCount >= 2;
+    if (hasPair){
       group.add(platformAt('L'));
       group.add(platformAt('R'));
     } else {
       group.add(platformAt(s.side));
+    }
+    // Wing platforms for pCount > 2 — alternate sides going outward.
+    const primaryCount = hasPair ? 2 : 1;
+    let wingsL = 0, wingsR = 0;
+    let nextLabel = primaryCount + 1;
+    for (let i = 0; i < pCount - primaryCount; i++){
+      if (i % 2 === 0){
+        wingsL++;
+        group.add(wingAt(-3.55 - WING_GAP * wingsL, -1, nextLabel++));
+      } else {
+        wingsR++;
+        group.add(wingAt(TRACK_GAUGE_OFFSET + 3.55 + WING_GAP * wingsR, +1, nextLabel++));
+      }
     }
   }
   return group;

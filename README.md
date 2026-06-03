@@ -212,7 +212,7 @@ entry. Required fields:
 | `key` | string | unique table key (loaded keys may collide with bundled ones — that replaces) |
 | `name` | string | human-readable line name |
 | `totalKm` | number | route length, must be > 0 |
-| `stations` | array | ≥ 2 entries, each with `km`, `name`, `code`, `plat`, `side` (`'L'`\|`'R'`\|`'I'`), `elev`, `lat`, `lon` |
+| `stations` | array | ≥ 2 entries, each with `km`, `name`, `code`, `plat`, `side` (`'L'`\|`'R'`\|`'I'`), `elev`, `lat`, `lon`. Each station may also carry optional `platforms` (1–6, defaults to 2 for `side: 'I'` else 1) and `type` (`'halt'`\|`'station'`\|`'terminus'`\|`'junction'`, defaults to `'station'`). Halts skip the canopy; counts above 2 add "wing" platforms further out laterally with `PLATFORM n` badges. Terminus / junction are recognised but currently render as a normal station. |
 | `schedule` | array of numbers | cumulative seconds from departure, same length as `stations` |
 | `limits` | array | ≥ 1 entry, each `{ km, mph }` (use `km: 0` for the starting limit) |
 
