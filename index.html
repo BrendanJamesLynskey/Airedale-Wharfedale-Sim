@@ -975,6 +975,84 @@ function buildRiver(){
 }
 
 // ============================================================
+// COAST — sea + sand strip, swapped in for buildRiver() when
+// ROUTE.biome === 'coastal'. The user's riverPath polyline is
+// reinterpreted as the coastline:
+//   • the SIGN of the average lat picks which side of the track
+//     the sea sits on (positive = south / right, negative = north
+//     / left; defaults to south if no path was drawn)
+//   • the MAGNITUDE of riverLatAt(km) drives the local coast
+//     position, clamped to a visible 180-600 m band so the water
+//     is in view regardless of how far out the user originally
+//     drew it (the editor's "river" tool was the only linear-
+//     feature tool, so users tend to draw the coast far away)
+// Sea sits 25 m below the trackbed so the cab looks down at the
+// water like a real cliff-top coastal line.
+// ============================================================
+function buildCoast(){
+  const group = new THREE.Group();
+  const stepKm = 0.10;
+  const totalKm = ROUTE.totalKm;
+  const segs = floor(totalKm / stepKm);
+  const COAST_MIN = 180, COAST_MAX = 600;     // visible-band clamps
+  const SAND_W = 36, SEA_W = 8000, SEA_DROP = 25;
+  let avgLat = 1;     // default to south if no riverPath
+  if (ROUTE.riverPath && ROUTE.riverPath.length){
+    let s = 0;
+    for (const rp of ROUTE.riverPath) s += rp.lat || 0;
+    avgLat = s / ROUTE.riverPath.length;
+  }
+  const SIDE = avgLat >= 0 ? 1 : -1;
+  function coastLat(km){
+    const raw = (ROUTE.riverPath && ROUTE.riverPath.length) ? abs(riverLatAt(km)) : 300;
+    return clamp(raw, COAST_MIN, COAST_MAX);
+  }
+  const sandPos = [], sandIdx = [];
+  const seaPos = [], seaIdx = [];
+  const seaY0 = (ROUTE.stations[0]?.elev || 0) - SEA_DROP;
+  for (let i = 0; i <= segs; i++){
+    const km = i * stepKm;
+    const f = trackFrame(km);
+    const cl = coastLat(km);
+    // Sand sits at local trackbed elevation - a small offset to slip under
+    // the grass without z-fighting; the inner edge tucks slightly under the
+    // terrain so there's no visible seam at the SAND_W boundary.
+    const sandInner = f.p.clone().add(f.r.clone().multiplyScalar(SIDE * (cl - SAND_W)));
+    const sandOuter = f.p.clone().add(f.r.clone().multiplyScalar(SIDE * cl));
+    sandInner.y -= 0.35;
+    sandOuter.y -= 0.55;
+    sandPos.push(sandInner.x, sandInner.y, sandInner.z, sandOuter.x, sandOuter.y, sandOuter.z);
+    // Sea is a flat plane well below trackbed. Use a fixed Y based on the
+    // first station's elev rather than per-km local elevation — a real sea
+    // surface is level, not gradient-following.
+    const seaInner = f.p.clone().add(f.r.clone().multiplyScalar(SIDE * cl));
+    const seaOuter = f.p.clone().add(f.r.clone().multiplyScalar(SIDE * (cl + SEA_W)));
+    seaInner.y = seaY0;
+    seaOuter.y = seaY0;
+    seaPos.push(seaInner.x, seaInner.y, seaInner.z, seaOuter.x, seaOuter.y, seaOuter.z);
+    if (i < segs){
+      const k = i * 2;
+      sandIdx.push(k, k+1, k+2, k+1, k+3, k+2);
+      seaIdx.push(k, k+1, k+2, k+1, k+3, k+2);
+    }
+  }
+  function strip(positions, indices, color){
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(indices);
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    const m = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.frustumCulled = false;
+    return mesh;
+  }
+  group.add(strip(sandPos, sandIdx, 0xd8c290));   // pale sand
+  group.add(strip(seaPos,  seaIdx,  0x2a6090));   // deep blue sea
+  return group;
+}
+
+// ============================================================
 // TRACK — ballast + sleepers + rails, swept along centreline
 // ============================================================
 function buildTrack(){
@@ -1765,7 +1843,10 @@ function clearWorld(){
 function buildWorld(){
   clearWorld();
   _addWorld(buildTerrain());
-  _addWorld(buildRiver());
+  // Coastal biome substitutes the river ribbon for a sea + sand strip; the
+  // riverPath data is reused as the coastline (sign picks the side, magnitude
+  // picks the local distance after clamping to a visible band).
+  _addWorld(ROUTE.biome === 'coastal' ? buildCoast() : buildRiver());
   _addWorld(buildTrack());
   _addWorld(buildOHLE());
   _addWorld(buildStations());

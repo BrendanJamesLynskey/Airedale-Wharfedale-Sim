@@ -222,7 +222,7 @@ Optional fields (auto-defaulted if missing):
 |-------|---------|-------|
 | `displayName` | upper-cased `name` | menu h2 / cab schedule card header |
 | `subtitle` | derived from station endpoints + km + count | menu service line |
-| `biome` | `"countryside"` | metadata tag, no rendering effect yet |
+| `biome` | `"countryside"` | mostly a metadata tag; `"coastal"` swaps the river ribbon for a sea + sand strip (see Biomes below). Other values (`moorland`, `urban`, `upland`) have no rendering effect yet. |
 | `service` | derived from station codes | cab schedule card top line |
 | `features` | `[]` | each `{ km, type: 'bridge'\|'tunnel'\|'viaduct'\|'mill', len?, side? }` |
 | `riverPath` | `[]` | each `{ km, lat }` — `lat` is **metres lateral offset** from track centreline, not geographic latitude; smoothstep-interpolated between control points; cross zero at bridge km for a visible crossing |
@@ -235,6 +235,32 @@ interpolating through them — plus any `shapePoints` — with Catmull-Rom
 curves. The terrain plane, OHLE, signals and scatter all derive from
 the resulting centreline, so any geographically-plausible set of
 lat/lons will render a coherent line.
+
+### Biomes
+
+Most of the biome values are just menu metadata, but `coastal` is
+wired up. When `biome: "coastal"`:
+
+- The river ribbon is replaced by a wide sea plane plus a sand
+  strip, on one side of the track.
+- Which side is determined by the **sign** of the average `riverPath`
+  `lat` offset — positive (south of track) puts the sea south,
+  negative (north of track) puts it north. With no `riverPath` the
+  sea defaults to the south.
+- The local distance to the coast comes from `|riverLatAt(km)|`,
+  clamped to 180–600 m so the sea is always visible from the cab
+  (the editor's "river" tool tends to land coastline values further
+  out than the visible terrain extends).
+- The sea surface sits 25 m below the trackbed, so the cab looks
+  down at the water like a real cliff-top line.
+
+So the practical recipe when drawing a coastal line in the editor:
+use the **＋ River pt** tool to sketch where the coast runs, on the
+side of the track you want it. The exact distance you draw is a
+suggestion — the sim clamps it to a visible band — but the side and
+the shape both come through. Other features (bridges, viaducts,
+tunnels) still render as expected; you can use a bridge to cross an
+inlet.
 
 ## Roadmap
 
