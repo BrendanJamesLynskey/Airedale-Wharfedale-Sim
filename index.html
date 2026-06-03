@@ -4633,12 +4633,14 @@ function buildCarBody(carLen, isCab){
   const bodyH = 2.75;
   const bodyBaseY = 1.05;
   const bodyLen = carLen - 0.5;
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, metalness: 0.55, roughness: 0.4 });
-  const winMat  = new THREE.MeshStandardMaterial({ color: 0x0c1422, metalness: 0.55, roughness: 0.18, transparent: true, opacity: 0.78 });
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0x4a5868, metalness: 0.4, roughness: 0.5 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: 0x2a4a78, metalness: 0.4, roughness: 0.4 });
-  const bogieMat = new THREE.MeshStandardMaterial({ color: 0x202428, metalness: 0.3, roughness: 0.8 });
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x141518, metalness: 0.65, roughness: 0.45 });
+  // metalness must be ~0 because the scene has no environment map — a
+  // metallic material with no reflection probe just renders BLACK. Plain
+  // white body, mid-grey doors, dark grey bogies, near-black wheels.
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f6, metalness: 0.05, roughness: 0.55 });
+  const winMat  = new THREE.MeshStandardMaterial({ color: 0x0c1422, metalness: 0.05, roughness: 0.25, transparent: true, opacity: 0.78 });
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0xc4c8cd, metalness: 0.05, roughness: 0.6 });
+  const bogieMat = new THREE.MeshStandardMaterial({ color: 0x303338, metalness: 0.05, roughness: 0.85 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, metalness: 0.05, roughness: 0.55 });
   // Body shell — softened cube
   const body = new THREE.Mesh(roundedBoxGeo(bodyW, bodyH, bodyLen, 0.22), bodyMat);
   body.position.set(0, bodyBaseY + bodyH/2, 0);
@@ -4649,12 +4651,7 @@ function buildCarBody(carLen, isCab){
     win.position.set(side * (bodyW/2 + 0.01), bodyBaseY + 1.85, 0);
     car.add(win);
   }
-  // Blue accent trim along the bodyside
-  for (const side of [-1, 1]){
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.28, bodyLen), trimMat);
-    trim.position.set(side * (bodyW/2 + 0.005), bodyBaseY + 0.25, 0);
-    car.add(trim);
-  }
+  // (Body kept plain — no accent trim band)
   // Sliding doors — 2 per side
   const doorSpan = bodyLen - 6;
   for (const side of [-1, 1]){
@@ -4682,27 +4679,30 @@ function buildCarBody(carLen, isCab){
     }
   }
   // Coupler stubs at each end
-  const couplerMat = new THREE.MeshStandardMaterial({ color: 0x202020, metalness: 0.5, roughness: 0.6 });
+  const couplerMat = new THREE.MeshStandardMaterial({ color: 0x202020, metalness: 0.05, roughness: 0.7 });
   for (const z of [-bodyLen/2 - 0.05, bodyLen/2 + 0.05]){
     const coupler = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.25), couplerMat);
     coupler.position.set(0, 0.85, z);
     car.add(coupler);
   }
-  // Cab car: sloped nose + transparent windscreen + headlight pads
+  // Cab car: sloped nose (UK-standard yellow warning panel) + transparent
+  // windscreen + headlight pads. Yellow nose is the rail-industry safety
+  // colour for the leading face of every UK passenger train.
   if (isCab){
     const noseW = bodyW * 0.95;
     const noseH = bodyH * 0.78;
     const noseD = 0.9;
-    const nose = new THREE.Mesh(roundedBoxGeo(noseW, noseH, noseD, 0.18), bodyMat);
+    const yellowMat = new THREE.MeshStandardMaterial({ color: 0xfdcc00, metalness: 0.05, roughness: 0.55 });
+    const nose = new THREE.Mesh(roundedBoxGeo(noseW, noseH, noseD, 0.18), yellowMat);
     nose.position.set(0, bodyBaseY + noseH/2 + 0.05, bodyLen/2 + noseD/2);
     nose.rotation.x = 0.08;
     car.add(nose);
-    const wsMat = new THREE.MeshStandardMaterial({ color: 0x0a1424, metalness: 0.65, roughness: 0.1, transparent: true, opacity: 0.5 });
+    const wsMat = new THREE.MeshStandardMaterial({ color: 0x0a1424, metalness: 0.05, roughness: 0.18, transparent: true, opacity: 0.5 });
     const ws = new THREE.Mesh(new THREE.PlaneGeometry(bodyW * 0.85, 1.5), wsMat);
     ws.position.set(0, bodyBaseY + bodyH * 0.7, bodyLen/2 + noseD - 0.04);
     ws.rotation.x = 0.15;
     car.add(ws);
-    const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff5d0, emissive: 0xffeec0, emissiveIntensity: 0.55, metalness: 0.2, roughness: 0.3 });
+    const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff5d0, emissive: 0xffeec0, emissiveIntensity: 0.55, metalness: 0.05, roughness: 0.3 });
     for (const dx of [-0.8, 0.8]){
       const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 16), lightMat);
       lamp.position.set(dx, bodyBaseY + 1.0, bodyLen/2 + noseD - 0.1);
