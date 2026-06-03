@@ -4610,6 +4610,172 @@ function buildAndAttachCab(spec){
   _builtCabKey = spec.key;
   // Lineside stop-markers (Shipley's "N CAR" plate) follow the active unit.
   repaintStopMarkers();
+  // External multi-car body so the unit reads as a real train from free cam.
+  buildAndAttachTrainBody(spec);
+}
+
+// ============================================================
+// EXTERIOR TRAIN BODY — multi-car shell positioned per-car along the
+// track, so when the user toggles into free cam they see the actual
+// unit instead of the cab's back walls. Each car carries its own body
+// shell, window strip, blue trim band, sliding doors, bogies, wheels
+// and coupler stubs; the leading (cab) car also gets a sloped nose,
+// transparent windscreen and headlight pads. The cab interior built
+// by buildCab333 / buildCab331 sits inside the leading car's body —
+// visible through the body's windscreen from outside, and unobscured
+// in cab-cam because both windscreens are nearly co-planar.
+// ============================================================
+let trainBody = null;
+
+function buildCarBody(carLen, isCab){
+  const car = new THREE.Group();
+  const bodyW = 2.78;
+  const bodyH = 2.75;
+  const bodyBaseY = 1.05;
+  const bodyLen = carLen - 0.5;
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, metalness: 0.55, roughness: 0.4 });
+  const winMat  = new THREE.MeshStandardMaterial({ color: 0x0c1422, metalness: 0.55, roughness: 0.18, transparent: true, opacity: 0.78 });
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x4a5868, metalness: 0.4, roughness: 0.5 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x2a4a78, metalness: 0.4, roughness: 0.4 });
+  const bogieMat = new THREE.MeshStandardMaterial({ color: 0x202428, metalness: 0.3, roughness: 0.8 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x141518, metalness: 0.65, roughness: 0.45 });
+  // Body shell — softened cube
+  const body = new THREE.Mesh(roundedBoxGeo(bodyW, bodyH, bodyLen, 0.22), bodyMat);
+  body.position.set(0, bodyBaseY + bodyH/2, 0);
+  car.add(body);
+  // Window strip — dark band along both sides
+  for (const side of [-1, 1]){
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.9, bodyLen - 1.5), winMat);
+    win.position.set(side * (bodyW/2 + 0.01), bodyBaseY + 1.85, 0);
+    car.add(win);
+  }
+  // Blue accent trim along the bodyside
+  for (const side of [-1, 1]){
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.28, bodyLen), trimMat);
+    trim.position.set(side * (bodyW/2 + 0.005), bodyBaseY + 0.25, 0);
+    car.add(trim);
+  }
+  // Sliding doors — 2 per side
+  const doorSpan = bodyLen - 6;
+  for (const side of [-1, 1]){
+    for (let d = 0; d < 2; d++){
+      const z = -doorSpan/2 + d * doorSpan;
+      const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.1, 1.45), doorMat);
+      door.position.set(side * (bodyW/2 + 0.015), bodyBaseY + 1.42, z);
+      car.add(door);
+    }
+  }
+  // Bogies + 4 wheels each
+  const bogieGeo = roundedBoxGeo(2.4, 0.55, 2.7, 0.12);
+  const wheelGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.08, 16);
+  for (const z of [-bodyLen/2 + 2.6, bodyLen/2 - 2.6]){
+    const bogie = new THREE.Mesh(bogieGeo, bogieMat);
+    bogie.position.set(0, 0.55, z);
+    car.add(bogie);
+    for (const dz of [-0.95, 0.95]){
+      for (const dx of [-0.72, 0.72]){
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.position.set(dx, 0.46, z + dz);
+        wheel.rotation.z = Math.PI / 2;
+        car.add(wheel);
+      }
+    }
+  }
+  // Coupler stubs at each end
+  const couplerMat = new THREE.MeshStandardMaterial({ color: 0x202020, metalness: 0.5, roughness: 0.6 });
+  for (const z of [-bodyLen/2 - 0.05, bodyLen/2 + 0.05]){
+    const coupler = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.25), couplerMat);
+    coupler.position.set(0, 0.85, z);
+    car.add(coupler);
+  }
+  // Cab car: sloped nose + transparent windscreen + headlight pads
+  if (isCab){
+    const noseW = bodyW * 0.95;
+    const noseH = bodyH * 0.78;
+    const noseD = 0.9;
+    const nose = new THREE.Mesh(roundedBoxGeo(noseW, noseH, noseD, 0.18), bodyMat);
+    nose.position.set(0, bodyBaseY + noseH/2 + 0.05, bodyLen/2 + noseD/2);
+    nose.rotation.x = 0.08;
+    car.add(nose);
+    const wsMat = new THREE.MeshStandardMaterial({ color: 0x0a1424, metalness: 0.65, roughness: 0.1, transparent: true, opacity: 0.5 });
+    const ws = new THREE.Mesh(new THREE.PlaneGeometry(bodyW * 0.85, 1.5), wsMat);
+    ws.position.set(0, bodyBaseY + bodyH * 0.7, bodyLen/2 + noseD - 0.04);
+    ws.rotation.x = 0.15;
+    car.add(ws);
+    const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff5d0, emissive: 0xffeec0, emissiveIntensity: 0.55, metalness: 0.2, roughness: 0.3 });
+    for (const dx of [-0.8, 0.8]){
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 16), lightMat);
+      lamp.position.set(dx, bodyBaseY + 1.0, bodyLen/2 + noseD - 0.1);
+      lamp.rotation.x = Math.PI/2;
+      car.add(lamp);
+    }
+  }
+  return car;
+}
+
+function buildAndAttachTrainBody(spec){
+  if (trainBody){
+    scene.remove(trainBody);
+    trainBody.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material){
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+  }
+  trainBody = new THREE.Group();
+  trainBody.userData.spec = spec;
+  const carLen = spec.lengthM / spec.cars;
+  for (let i = 0; i < spec.cars; i++){
+    const car = buildCarBody(carLen, i === 0);
+    car.userData = { carIndex: i, carLen };
+    trainBody.add(car);
+  }
+  scene.add(trainBody);
+}
+
+// Place each car along the track at its current km. Naïvely offsetting by
+// (i + 0.5) * carLen / KM doesn't work because the Catmull-Rom curve's
+// world length doesn't track the declared `totalKm` 1:1 at every segment
+// (the route's lat/lon don't perfectly match the declared distance).
+// Instead, walk backwards in small km steps, accumulating *world-space*
+// distance, and place each car when the accumulated distance reaches its
+// required (carIndex + 0.5) × carLen offset. Trailing cars off the start
+// of the route fall back to the negative-km ghost-neighbour extrapolation,
+// keeping the unit visually continuous at the Leeds end of the line.
+function placeTrainBody(){
+  if (!trainBody) return;
+  // The body wraps the leading car around the cab, so from inside the cab
+  // looking out a side window the user would see the back of the body's
+  // sidewall (which is only ~22 % transparent through the dark window strip).
+  // Hide the body in cab cam and show it in free cam — the user is outside
+  // the cab in free cam, which is precisely when they want to see the unit.
+  trainBody.visible = !!GS.freeCam;
+  if (!trainBody.visible) return;
+  const spec = trainBody.userData.spec;
+  if (!spec) return;
+  const carLen = spec.lengthM / spec.cars;
+  const STEP_KM = 0.001;          // 1 m walk increments
+  let km = GS.km;
+  let prevPos = trackPoint(km).clone();
+  let accum = 0;                  // world-space metres behind the cab nose
+  for (let i = 0; i < trainBody.children.length; i++){
+    const targetDist = (i + 0.5) * carLen;
+    let guard = 5000;             // safety cap: at 1m steps that's 5 km, > any car
+    while (accum < targetDist && guard-- > 0){
+      km -= STEP_KM;
+      const newPos = trackPoint(km);
+      accum += newPos.distanceTo(prevPos);
+      prevPos = newPos;
+    }
+    const car = trainBody.children[i];
+    const f = trackFrame(km);
+    car.position.copy(f.p);
+    // lookAt makes +Z face the target; passing position + f.t lines the
+    // body's local +Z up with the forward tangent so the nose faces forward.
+    car.lookAt(car.position.clone().add(f.t));
+  }
 }
 // First-cab attach is deferred until after GS is declared (further down the
 // file), since buildAndAttachCab reads GS.train. The Boot block at the bottom
@@ -5537,6 +5703,7 @@ function loop(){
     }
 
     placeCamera();
+    placeTrainBody();
     updateCabAnim(simDt);
     updateHUD(dt);
     audioTick({
