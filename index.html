@@ -5273,12 +5273,13 @@ function buildCarBody(carLen, opts){
     const roofPatch = new THREE.Mesh(roundedBoxGeo(bodyW * 0.92, 0.20, 0.32, 0.08), yellowMat);
     roofPatch.position.set(0, bodyBaseY + bodyH - 0.06, dir * (bodyFront + 0.04));
     car.add(roofPatch);
-    // ---- Windscreen — wraparound feel via a wide pane that fits onto
-    // the raked face of the main nose. Tilt matches the nose tilt so the
-    // glass sits flush with the surface. ----
-    const wsW = bodyW * 0.80;
-    const wsH = 0.78;
-    const wsY = bodyBaseY + 2.30;
+    // ---- Windscreen — wide and TALL, sized to dominate the upper face
+    // like the real Class 700 (which has an unusually large single
+    // wraparound screen). Tilt matches the nose tilt so the glass sits
+    // flush with the surface. ----
+    const wsW = bodyW * 0.78;
+    const wsH = 1.20;                          // was 0.78 — substantially taller
+    const wsY = bodyBaseY + 2.10;              // centre dropped so the bigger pane fits below body top
     const wsZ = bodyFront + 0.55;
     const wsMat = new THREE.MeshStandardMaterial({
       color: 0x0a1424, metalness: 0.05, roughness: 0.18,
@@ -5333,25 +5334,29 @@ function buildCarBody(carLen, opts){
       color: 0xff5050, emissive: 0xcc1010, emissiveIntensity: 0.50,
       metalness: 0.05, roughness: 0.45,
     });
-    for (const dx of [-0.95, 0.95]){
+    // Clusters now sit at world y = 2.85 (was 2.60) so they flank the
+    // lower-mid section of the larger windscreen rather than living
+    // down by the bumper, and the x offset is pushed out to ±1.18 so
+    // they clear the wider windscreen edge.
+    for (const dx of [-1.18, 1.18]){
       // Cluster housing — rectangular black bezel inset into the nose face
-      const cluster = new THREE.Mesh(roundedBoxGeo(0.36, 0.46, 0.08, 0.05), bezelMat);
-      cluster.position.set(dx, bodyBaseY + 1.55, dir * (bodyFront + 0.78));
+      const cluster = new THREE.Mesh(roundedBoxGeo(0.32, 0.48, 0.08, 0.05), bezelMat);
+      cluster.position.set(dx, bodyBaseY + 1.80, dir * (bodyFront + 0.78));
       cluster.rotation.x = -dir * noseTilt;
       car.add(cluster);
       // Main beam (top lamp)
       const main = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.04, 16), mainBeamMat);
-      main.position.set(dx, bodyBaseY + 1.72, dir * (bodyFront + 0.82));
+      main.position.set(dx, bodyBaseY + 1.98, dir * (bodyFront + 0.82));
       main.rotation.x = Math.PI / 2 - dir * noseTilt;
       car.add(main);
       // Position light (middle)
       const pos = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), positionLampMat);
-      pos.position.set(dx, bodyBaseY + 1.52, dir * (bodyFront + 0.82));
+      pos.position.set(dx, bodyBaseY + 1.78, dir * (bodyFront + 0.82));
       pos.rotation.x = Math.PI / 2 - dir * noseTilt;
       car.add(pos);
       // Tail / marker light (bottom)
       const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), tailMat);
-      tail.position.set(dx, bodyBaseY + 1.36, dir * (bodyFront + 0.82));
+      tail.position.set(dx, bodyBaseY + 1.61, dir * (bodyFront + 0.82));
       tail.rotation.x = Math.PI / 2 - dir * noseTilt;
       car.add(tail);
     }
