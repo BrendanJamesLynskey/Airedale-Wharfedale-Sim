@@ -5362,12 +5362,15 @@ function buildAndAttachTrainBody(spec){
 // of the route fall back to the negative-km ghost-neighbour extrapolation,
 // keeping the unit visually continuous at the Leeds end of the line.
 function placeTrainBody(){
+  // The cab and the body never both render. The cab interior (in cabGroup)
+  // is built to a different convention from the body — cab is 3.4 m wide,
+  // body 2.78; cab floor at rail level, body floor 1.05 m up; cab windscreen
+  // pokes 0.27 m past the body's nose tip. In cab cam the user is INSIDE the
+  // cab so we show the cab and hide the body; in free cam the user is
+  // OUTSIDE so we show the body and hide the cab. Toggling cabGroup.visible
+  // here keeps the swap atomic with the trainBody swap.
+  cabGroup.visible = !GS.freeCam;
   if (!trainBody) return;
-  // The body wraps the leading car around the cab, so from inside the cab
-  // looking out a side window the user would see the back of the body's
-  // sidewall (which is only ~22 % transparent through the dark window strip).
-  // Hide the body in cab cam and show it in free cam — the user is outside
-  // the cab in free cam, which is precisely when they want to see the unit.
   trainBody.visible = !!GS.freeCam;
   if (!trainBody.visible) return;
   const spec = trainBody.userData.spec;
