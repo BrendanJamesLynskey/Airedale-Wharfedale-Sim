@@ -4673,21 +4673,37 @@ function buildCab700(spec){
   woodTrim.position.set(0, 1.04, -0.74);
   woodTrim.rotation.x = 0.10;
   g.add(woodTrim);
-  // Dashboard housing — compact frame around the central DMI only. Real
-  // Class 700 dashboards are dominated by a single large central screen
-  // set into a slim bezel; the housing here is sized to that bezel rather
-  // than spanning the full 2.8 m desk width (which was the "black object
-  // blocking the view" the user reported). Lighter dashMat too, so the
-  // panel reads as a steel / grey console rather than a black slab.
-  const dashHouseMat = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.55, metalness: 0.05 });
-  const dashHouse = new THREE.Mesh(roundedBoxGeo(1.55, 0.42, 0.18, 0.04), dashHouseMat);
-  dashHouse.position.set(0, 1.40, -0.15);
-  dashHouse.rotation.x = 0.30;
-  g.add(dashHouse);
-  // Blue trim strip across the top of the housing
-  const blueTrim = new THREE.Mesh(roundedBoxGeo(1.50, 0.04, 0.04, 0.008), trimBlueMat);
-  blueTrim.position.set(0, 1.60, -0.20);
-  blueTrim.rotation.x = 0.30;
+  // Dashboard housing has been removed from in front of the driver. The
+  // previous block sat at y = 1.40 directly in the forward sightline and
+  // read as a black panel blocking the view of the windscreen. Real
+  // Class 700 dashboards just have the DMI bezel flush in the desk
+  // surface (no raised housing), so we drop the block and let the DMI
+  // bezel below handle the frame. The CCTV monitor strip that does live
+  // up by the headliner is added separately below the windscreen frame.
+  // === CCTV / info strip ABOVE the windscreen — a slim panel mounted
+  // up against the headliner, well clear of the driver's forward view. ===
+  const cctvHousingMat = new THREE.MeshStandardMaterial({ color: 0x16181c, roughness: 0.55, metalness: 0.05 });
+  const cctvHousing = new THREE.Mesh(roundedBoxGeo(2.40, 0.18, 0.10, 0.025), cctvHousingMat);
+  cctvHousing.position.set(0, 2.10, -0.65);
+  cctvHousing.rotation.x = -0.08;
+  g.add(cctvHousing);
+  // Four CCTV monitor screens embedded in the housing — emissive so they
+  // glow faintly like a real platform-view feed.
+  const cctvScreenMat = new THREE.MeshStandardMaterial({
+    color: 0x1a3050, emissive: 0x224060, emissiveIntensity: 0.45,
+    metalness: 0.05, roughness: 0.4,
+  });
+  for (let i = 0; i < 4; i++){
+    const sx = -0.90 + i * 0.60;
+    const sc = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.12), cctvScreenMat);
+    sc.position.set(sx, 2.10, -0.595);
+    sc.rotation.x = -0.08;
+    g.add(sc);
+  }
+  // Slim blue accent trim under the CCTV strip
+  const blueTrim = new THREE.Mesh(roundedBoxGeo(2.40, 0.03, 0.03, 0.008), trimBlueMat);
+  blueTrim.position.set(0, 2.00, -0.63);
+  blueTrim.rotation.x = -0.08;
   g.add(blueTrim);
 
   // === DMI — single large landscape screen dominating the centre ===
@@ -5066,11 +5082,15 @@ function buildCarBody(carLen, opts){
   // metalness must be ~0 because the scene has no environment map — a
   // metallic material with no reflection probe just renders BLACK.
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f6, metalness: 0.05, roughness: 0.55 });
-  const winMat  = new THREE.MeshStandardMaterial({ color: 0x0c1422, metalness: 0.05, roughness: 0.25, transparent: true, opacity: 0.85 });
+  // Window glass is OPAQUE dark blue from the outside — transparent windows
+  // were getting lost behind the opaque body in three.js's transparency
+  // sort, which is why the user kept saying "windows are on the inside,
+  // can't see them from outside". Opaque dark glass renders deterministically
+  // in the first pass and reads sharply against the white shell from any
+  // viewing angle.
+  const winMat  = new THREE.MeshStandardMaterial({ color: 0x0c1422, metalness: 0.05, roughness: 0.25 });
   const winFrameMat = new THREE.MeshStandardMaterial({ color: 0x303338, metalness: 0.05, roughness: 0.6 });
-  // Thameslink livery — pastel blue doors against the white body. The
-  // previous light-grey doors blended into the body shell; pastel blue
-  // matches the real Class 700 livery and reads clearly from outside.
+  // Thameslink livery — pastel blue doors against the white body.
   const doorMat = new THREE.MeshStandardMaterial({ color: 0x9ec5e8, metalness: 0.05, roughness: 0.55 });
   const bogieMat = new THREE.MeshStandardMaterial({ color: 0x303338, metalness: 0.05, roughness: 0.85 });
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, metalness: 0.05, roughness: 0.55 });
@@ -5085,60 +5105,71 @@ function buildCarBody(carLen, opts){
   const winY = bodyBaseY + 1.85;
   const winH = 0.95;
   const winFrameMatTop = winFrameMat;
-  // Z-fight margin: the body shell's outer surface is at x = ±bodyW/2 =
-  // ±1.39. Any window / door / frame mesh placed with its INNER face at
-  // ±1.39 fought the body for depth, which is why "the windows and doors
-  // are not visible from outside". Pull every external surface out to
-  // x = ±(bodyW/2 + 0.035) = ±1.425 with thin meshes that leave a clean
-  // gap from the shell.
-  const SURFACE_DZ = 0.035;
+  // External surfaces sit on a proud "side panel" 0.12 m off the body shell:
+  // the body's outer face is at x = ±1.39, so windows / doors / frames live at
+  // x = ±1.51 with thick (0.06-0.08) meshes. This is well outside any depth
+  // fight zone and reads from any distance as a band of separate panels
+  // bolted onto the bodyside — which is what the user kept reporting was
+  // missing ("windows are on the inside, can't see them from outside").
+  const SURFACE_DZ = 0.12;
   for (const side of [-1, 1]){
     const xOuter = side * (bodyW/2 + SURFACE_DZ);
-    // Dark glass strip
-    const win = new THREE.Mesh(new THREE.BoxGeometry(0.025, winH, windowZSpan), winMat);
+    // Recessed window backing panel — slightly darker grey that the glass
+    // and mullions sit against. Gives the window strip visual depth.
+    const winBack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, winH + 0.20, windowZSpan + 0.10),
+      winFrameMatTop
+    );
+    winBack.position.set(side * (bodyW/2 + SURFACE_DZ - 0.02), winY, 0);
+    car.add(winBack);
+    // Dark glass strip — thick, opaque dark blue. Sits PROUD of the backing
+    // panel so the glass face is visible from any side viewing angle.
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, winH, windowZSpan), winMat);
     win.position.set(xOuter, winY, 0);
     car.add(win);
-    // Top + bottom horizontal frame rails (slightly outside the glass)
-    for (const dy of [+winH/2 + 0.04, -winH/2 - 0.04]){
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.07, windowZSpan + 0.04), winFrameMatTop);
+    // Top + bottom horizontal frame rails capping the window strip
+    for (const dy of [+winH/2 + 0.05, -winH/2 - 0.05]){
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.10, windowZSpan + 0.10), winFrameMatTop);
       rail.position.set(xOuter, winY + dy, 0);
       car.add(rail);
     }
-    // Vertical mullions every ~1.85 m
+    // Vertical mullions every ~1.85 m — thicker so they read as real
+    // pillars between adjacent windows
     const mullionCount = Math.max(2, Math.round(windowZSpan / 1.85));
     for (let k = 1; k < mullionCount; k++){
       const u = k / mullionCount;
       const z = -windowZSpan/2 + u * windowZSpan;
-      const mul = new THREE.Mesh(new THREE.BoxGeometry(0.025, winH + 0.06, 0.05), winFrameMatTop);
+      const mul = new THREE.Mesh(new THREE.BoxGeometry(0.08, winH + 0.12, 0.08), winFrameMatTop);
       mul.position.set(xOuter, winY, z);
       car.add(mul);
     }
   }
   // Sliding doors — 2 per side, each with a window pane + thin frame +
-  // an above-door indicator LED. All mounted on the outer face of the
-  // body shell so they read as separate panels from outside.
+  // an above-door indicator LED. Doors sit proud of the body in pastel
+  // Thameslink blue so they read clearly against the white shell.
   const doorSpan = bodyLen - 6;
   for (const side of [-1, 1]){
     const doorXOuter = side * (bodyW/2 + SURFACE_DZ);
     for (let d = 0; d < 2; d++){
       const z = -doorSpan/2 + d * doorSpan;
-      // Door leaf — thinner so it sits flush against the body without
-      // poking through to the inside (where the cab interior lives).
-      const door = new THREE.Mesh(new THREE.BoxGeometry(0.025, 2.05, 1.45), doorMat);
+      // Door leaf — thick (0.08 m) so the proud panel reads even from a
+      // shallow viewing angle.
+      const door = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.05, 1.45), doorMat);
       door.position.set(doorXOuter, bodyBaseY + 1.42, z);
       car.add(door);
-      // Upper-half window in the door
-      const doorWin = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.85, 1.05), winMat);
-      doorWin.position.set(side * (bodyW/2 + SURFACE_DZ + 0.005), bodyBaseY + 1.85, z);
+      // Upper-half window in the door — set slightly further out than the
+      // leaf so the glass is unmistakably in front of the blue panel.
+      const doorWin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.85, 1.05), winMat);
+      doorWin.position.set(side * (bodyW/2 + SURFACE_DZ + 0.06), bodyBaseY + 1.85, z);
       car.add(doorWin);
       // Vertical seam down the centre of the door (Class 700 doors are a
       // two-leaf bi-parting split)
-      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.027, 2.0, 0.025), winFrameMatTop);
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.0, 0.04), winFrameMatTop);
       seam.position.set(doorXOuter, bodyBaseY + 1.42, z);
       car.add(seam);
       // Frame around the door — top/bottom rails
       for (const dy of [+1.07, -0.03]){
-        const fr = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.03, 1.50), winFrameMatTop);
+        const fr = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 1.50), winFrameMatTop);
         fr.position.set(doorXOuter, bodyBaseY + 1.42 + dy, z);
         car.add(fr);
       }
@@ -5147,7 +5178,7 @@ function buildCarBody(carLen, opts){
         color: 0x40aaff, emissive: 0x1060c0, emissiveIntensity: 0.4,
         metalness: 0.05, roughness: 0.4,
       });
-      const ind = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), indMat);
+      const ind = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), indMat);
       ind.position.set(doorXOuter, bodyBaseY + 2.50, z);
       car.add(ind);
     }
@@ -5206,16 +5237,45 @@ function buildCarBody(carLen, opts){
     upperNose.position.set(0, bodyBaseY + 1.50 + upperNoseH/2, dir * (bodyLen/2 + 0.35));
     upperNose.rotation.x = -dir * tilt;
     car.add(upperNose);
-    // ---- Windscreen — transparent dark plane riding the raked face ----
+    // ---- Windscreen — dark glass on the raked nose. Opaque dark blue
+    // reads as a windscreen from any distance; transparent windscreens
+    // were nearly invisible at the previous 0.45 opacity. A black bezel
+    // frames the glass on all four sides so the windscreen has a clear
+    // visual boundary against the yellow nose. ----
+    const wsW = bodyW * 0.84;
+    const wsH = 1.50;
     const wsMat = new THREE.MeshStandardMaterial({
       color: 0x0a1424, metalness: 0.05, roughness: 0.15,
-      transparent: true, opacity: 0.45,
     });
-    const ws = new THREE.Mesh(new THREE.PlaneGeometry(bodyW * 0.84, 1.50), wsMat);
-    ws.position.set(0, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.55));
+    const wsFrameMat = new THREE.MeshStandardMaterial({
+      color: 0x16181c, metalness: 0.05, roughness: 0.55,
+    });
+    // Frame — slightly larger than the glass, sits a fraction behind so
+    // it shows around the edge as a chrome/black bezel.
+    const wsFrame = new THREE.Mesh(
+      new THREE.PlaneGeometry(wsW + 0.16, wsH + 0.16),
+      wsFrameMat
+    );
+    wsFrame.position.set(0, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.545));
+    wsFrame.rotation.x = -dir * tilt;
+    if (dir < 0) wsFrame.rotation.y = Math.PI;
+    car.add(wsFrame);
+    // Glass pane on top
+    const ws = new THREE.Mesh(new THREE.PlaneGeometry(wsW, wsH), wsMat);
+    ws.position.set(0, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.555));
     ws.rotation.x = -dir * tilt;
     if (dir < 0) ws.rotation.y = Math.PI;
     car.add(ws);
+    // Centre pillar dividing the windscreen into left / right panes
+    // (real Class 700 has a slim vertical mullion between two glass panels)
+    const wsCenterPillar = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.08, wsH),
+      wsFrameMat
+    );
+    wsCenterPillar.position.set(0, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.560));
+    wsCenterPillar.rotation.x = -dir * tilt;
+    if (dir < 0) wsCenterPillar.rotation.y = Math.PI;
+    car.add(wsCenterPillar);
     // ---- Roof transition — small sliver between the raked nose top and body ----
     const roofPatch = new THREE.Mesh(
       roundedBoxGeo(bodyW * 0.92, 0.18, 0.3, 0.05),
