@@ -52,6 +52,25 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 #tp-aws{right:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(255,170,0,0.18);}
 #tp-dsd{right:6vw;top:14vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(255,80,80,0.18);}
 #tp-pause{left:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;}
+/* Free-cam pads — hidden in cab cam, shown when #touch carries the .fc class.
+   The CAM toggle (top-right, below DSD) flips the camera mode and the class.
+   Selectors below use the #touch ancestor (specificity 2 IDs) so they win
+   against the base "#touch .pad { display:flex }" rule above. */
+#tp-cam{right:6vw;top:22vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(92,200,255,0.18);}
+#touch #tp-fc-fwd  {left:22vw;bottom:27vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
+#touch #tp-fc-back {left:22vw;bottom:5vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
+#touch #tp-fc-left {left:5vw;bottom:16vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
+#touch #tp-fc-right{left:39vw;bottom:16vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
+#touch #tp-fc-up   {right:6vw;bottom:24vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
+#touch #tp-fc-down {right:6vw;bottom:13vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
+/* In free cam, hide the train-control pads and show the camera-movement pads. */
+#touch.fc #tp-pwr-up, #touch.fc #tp-pwr-dn,
+#touch.fc #tp-brk-up, #touch.fc #tp-brk-dn,
+#touch.fc #tp-horn,   #touch.fc #tp-aws,
+#touch.fc #tp-dsd {display:none;}
+#touch.fc #tp-fc-fwd, #touch.fc #tp-fc-back,
+#touch.fc #tp-fc-left, #touch.fc #tp-fc-right,
+#touch.fc #tp-fc-up, #touch.fc #tp-fc-down {display:flex;}
 
 /* Pause overlay */
 #pause{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.78);display:none;flex-direction:column;align-items:center;justify-content:center;color:#cfe6f7;font-family:'Orbitron',sans-serif;}
@@ -138,6 +157,13 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
   <div class="pad" id="tp-brk-up">BRK ▲</div>
   <div class="pad" id="tp-brk-dn">BRK ▼</div>
   <div class="pad" id="tp-horn">HORN</div>
+  <div class="pad" id="tp-cam">CAM</div>
+  <div class="pad" id="tp-fc-fwd">FWD</div>
+  <div class="pad" id="tp-fc-back">BACK</div>
+  <div class="pad" id="tp-fc-left">LEFT</div>
+  <div class="pad" id="tp-fc-right">RIGHT</div>
+  <div class="pad" id="tp-fc-up">UP</div>
+  <div class="pad" id="tp-fc-down">DOWN</div>
 </div>
 
 <div id="pause">
@@ -5334,29 +5360,30 @@ function buildCarBody(carLen, opts){
       color: 0xff5050, emissive: 0xcc1010, emissiveIntensity: 0.50,
       metalness: 0.05, roughness: 0.45,
     });
-    // Clusters now sit at world y = 2.85 (was 2.60) so they flank the
-    // lower-mid section of the larger windscreen rather than living
-    // down by the bumper, and the x offset is pushed out to ±1.18 so
-    // they clear the wider windscreen edge.
-    for (const dx of [-1.18, 1.18]){
+    // Clusters now sit at world y = 2.25 (cluster centre — was 2.85),
+    // dropped to the lower-mid yellow face well below the windscreen
+    // base where the real Class 700's headlights actually live. Slightly
+    // closer to centre too (±1.05 vs ±1.18) since they no longer need
+    // to clear the windscreen edge.
+    for (const dx of [-1.05, 1.05]){
       // Cluster housing — rectangular black bezel inset into the nose face
-      const cluster = new THREE.Mesh(roundedBoxGeo(0.32, 0.48, 0.08, 0.05), bezelMat);
-      cluster.position.set(dx, bodyBaseY + 1.80, dir * (bodyFront + 0.78));
+      const cluster = new THREE.Mesh(roundedBoxGeo(0.34, 0.46, 0.08, 0.05), bezelMat);
+      cluster.position.set(dx, bodyBaseY + 1.20, dir * (bodyFront + 0.86));
       cluster.rotation.x = -dir * noseTilt;
       car.add(cluster);
       // Main beam (top lamp)
       const main = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.04, 16), mainBeamMat);
-      main.position.set(dx, bodyBaseY + 1.98, dir * (bodyFront + 0.82));
+      main.position.set(dx, bodyBaseY + 1.36, dir * (bodyFront + 0.90));
       main.rotation.x = Math.PI / 2 - dir * noseTilt;
       car.add(main);
       // Position light (middle)
       const pos = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), positionLampMat);
-      pos.position.set(dx, bodyBaseY + 1.78, dir * (bodyFront + 0.82));
+      pos.position.set(dx, bodyBaseY + 1.18, dir * (bodyFront + 0.90));
       pos.rotation.x = Math.PI / 2 - dir * noseTilt;
       car.add(pos);
       // Tail / marker light (bottom)
       const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), tailMat);
-      tail.position.set(dx, bodyBaseY + 1.61, dir * (bodyFront + 0.82));
+      tail.position.set(dx, bodyBaseY + 1.02, dir * (bodyFront + 0.90));
       tail.rotation.x = Math.PI / 2 - dir * noseTilt;
       car.add(tail);
     }
@@ -5841,7 +5868,7 @@ function enterFreeCam(){
   GS.freeCamPitch = Math.asin(Math.max(-1, Math.min(1, fwd.y)));
   scene.add(camera);                       // reparent to scene so position/rotation are world-space
   camera.rotation.order = 'YXZ';
-  showMsg('FREE CAM — WASD / SPACE / LCTRL · drag to look · C to return', 'info', 4.0);
+  showMsg('FREE CAM — WASD / SPACE / LCTRL (or on-screen pads) · drag to look · C / tap CAB to return', 'info', 4.0);
 }
 function exitFreeCam(){
   GS.freeCam = false;
@@ -5852,13 +5879,28 @@ function exitFreeCam(){
   camera.position.set(ex, 1.85, 0.30);
   showMsg('CAB CAM', 'ok', 1.2);
 }
+// Single entry point for toggling — keeps the touch-pad UI in sync (CSS
+// class on #touch swaps train pads for movement pads, CAM/CAB label flip)
+// no matter whether the toggle came from the keyboard C, the CAM pad, or
+// somewhere else. Also resets any held touch movement so a stale state
+// doesn't keep the camera flying after exit.
+function toggleFreeCam(){
+  if (GS.freeCam) exitFreeCam(); else enterFreeCam();
+  for (const k in TOUCH_FC) TOUCH_FC[k] = false;
+  const touch = document.getElementById('touch');
+  const camPad = document.getElementById('tp-cam');
+  if (touch) touch.classList.toggle('fc', GS.freeCam);
+  if (camPad) camPad.textContent = GS.freeCam ? 'CAB' : 'CAM';
+}
 
 window.addEventListener('keydown', e => {
   if (e.repeat) return;            // we manage repeat ourselves
   KEYS[e.code] = true;
   if (!GS.running) return;
-  // KeyC toggles free-cam regardless of mode.
-  if (e.code === 'KeyC') { if (GS.freeCam) exitFreeCam(); else enterFreeCam(); return; }
+  // KeyC toggles free-cam regardless of mode — go through toggleFreeCam
+  // so the touch-pad UI stays in sync (the CAM/CAB label and the .fc class
+  // that swaps train pads for camera-movement pads).
+  if (e.code === 'KeyC') { toggleFreeCam(); return; }
   // Pause is always available.
   if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); return; }
   // All other train controls are silenced in free-cam so WASD doesn't drive
@@ -5882,7 +5924,11 @@ window.addEventListener('keydown', e => {
 });
 
 // Free-cam movement — WASD planar (along camera-local forward / right),
-// Space up, LCtrl down, LShift triples the speed for fast traversal.
+// Space up, LCtrl down, LShift triples the speed for fast traversal. On
+// mobile / touch devices, the same axes are driven by on-screen pads that
+// flip TOUCH_FC.{fwd,back,left,right,up,down} while held — see the bindPad
+// wiring below.
+const TOUCH_FC = { fwd:false, back:false, left:false, right:false, up:false, down:false };
 function freeCamStep(dt){
   if (!GS.freeCam) return;
   const fast = !!(KEYS['ShiftLeft'] || KEYS['ShiftRight']);
@@ -5893,12 +5939,13 @@ function freeCamStep(dt){
   const fwd  = new THREE.Vector3(-sy, 0, -cy);
   const rgt  = new THREE.Vector3( cy, 0, -sy);
   const up   = new THREE.Vector3(0, 1, 0);
-  if (KEYS['KeyW']) GS.freeCamPos.addScaledVector(fwd, speed * dt);
-  if (KEYS['KeyS']) GS.freeCamPos.addScaledVector(fwd, -speed * dt);
-  if (KEYS['KeyA']) GS.freeCamPos.addScaledVector(rgt, -speed * dt);
-  if (KEYS['KeyD']) GS.freeCamPos.addScaledVector(rgt,  speed * dt);
-  if (KEYS['Space']) GS.freeCamPos.addScaledVector(up,  speed * dt);
-  if (KEYS['ControlLeft'] || KEYS['ControlRight']) GS.freeCamPos.addScaledVector(up, -speed * dt);
+  if (KEYS['KeyW'] || TOUCH_FC.fwd)   GS.freeCamPos.addScaledVector(fwd,  speed * dt);
+  if (KEYS['KeyS'] || TOUCH_FC.back)  GS.freeCamPos.addScaledVector(fwd, -speed * dt);
+  if (KEYS['KeyA'] || TOUCH_FC.left)  GS.freeCamPos.addScaledVector(rgt, -speed * dt);
+  if (KEYS['KeyD'] || TOUCH_FC.right) GS.freeCamPos.addScaledVector(rgt,  speed * dt);
+  if (KEYS['Space'] || TOUCH_FC.up)   GS.freeCamPos.addScaledVector(up,   speed * dt);
+  if (KEYS['ControlLeft'] || KEYS['ControlRight'] || TOUCH_FC.down)
+    GS.freeCamPos.addScaledVector(up, -speed * dt);
 }
 window.addEventListener('keyup', e => {
   KEYS[e.code] = false;
@@ -5938,6 +5985,17 @@ bindPad('tp-horn',   ()=>{ GS.horn = true; GS.hornHigh = true; }, ()=>{ GS.horn 
 bindPad('tp-aws',    ()=>{ awsReset(); });
 bindPad('tp-dsd',    ()=>{ dsdReset(); });
 bindPad('tp-pause',  ()=>{ togglePause(); });
+// Free-cam toggle + movement pads. The CAM pad swaps in/out of free cam via
+// toggleFreeCam, which also flips the .fc class on #touch so the CSS shows
+// the FWD/BACK/LEFT/RIGHT/UP/DOWN pads instead of the train controls. Held
+// pads write into TOUCH_FC, which freeCamStep reads each frame.
+bindPad('tp-cam', ()=>{ if (GS.running) toggleFreeCam(); });
+bindPad('tp-fc-fwd',   ()=>{ TOUCH_FC.fwd   = true; }, ()=>{ TOUCH_FC.fwd   = false; });
+bindPad('tp-fc-back',  ()=>{ TOUCH_FC.back  = true; }, ()=>{ TOUCH_FC.back  = false; });
+bindPad('tp-fc-left',  ()=>{ TOUCH_FC.left  = true; }, ()=>{ TOUCH_FC.left  = false; });
+bindPad('tp-fc-right', ()=>{ TOUCH_FC.right = true; }, ()=>{ TOUCH_FC.right = false; });
+bindPad('tp-fc-up',    ()=>{ TOUCH_FC.up    = true; }, ()=>{ TOUCH_FC.up    = false; });
+bindPad('tp-fc-down',  ()=>{ TOUCH_FC.down  = true; }, ()=>{ TOUCH_FC.down  = false; });
 
 // Detect touch device
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
