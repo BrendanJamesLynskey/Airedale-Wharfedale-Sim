@@ -5114,42 +5114,56 @@ function buildCarBody(carLen, opts){
   const winY = bodyBaseY + 1.85;
   const winH = 0.95;
   const winFrameMatTop = winFrameMat;
-  // External surfaces sit on a proud "side panel" 0.12 m off the body shell:
-  // the body's outer face is at x = ±1.39, so windows / doors / frames live at
-  // x = ±1.51 with thick (0.06-0.08) meshes. This is well outside any depth
-  // fight zone and reads from any distance as a band of separate panels
-  // bolted onto the bodyside — which is what the user kept reporting was
-  // missing ("windows are on the inside, can't see them from outside").
-  const SURFACE_DZ = 0.12;
+  // External surfaces now sit on a substantial 0.22 m proud "bay window"
+  // off the body shell: outer face at x = ±1.61 (was ±1.51), with a
+  // visible chrome FRAME wrapping the strip another 0.04 m further out at
+  // ±1.65. The protrusion is large enough that the window strip reads
+  // as a 3D bay window bolted to the side, not a flush decal — which is
+  // what the user kept asking for ("the windows are on the inside still,
+  // make them stick out"). Doors follow the same xOuter so they sit
+  // flush with the window-strip surface rather than recessed.
+  const SURFACE_DZ = 0.22;
+  const FRAME_DZ   = SURFACE_DZ + 0.04;       // chrome bezel 0.04 m beyond glass
+  const chromeFrameMat = new THREE.MeshStandardMaterial({
+    color: 0xb8bcc4, metalness: 0.15, roughness: 0.35,
+  });
   for (const side of [-1, 1]){
-    const xOuter = side * (bodyW/2 + SURFACE_DZ);
-    // Recessed window backing panel — slightly darker grey that the glass
-    // and mullions sit against. Gives the window strip visual depth.
+    const xOuter = side * (bodyW/2 + SURFACE_DZ);   // ±1.61 — glass plane
+    const xFrame = side * (bodyW/2 + FRAME_DZ);     // ±1.65 — chrome bezel face
+    // Inboard backing panel against the body — gives the bay window a
+    // recessed-looking dark interior face behind the glass.
     const winBack = new THREE.Mesh(
       new THREE.BoxGeometry(0.04, winH + 0.20, windowZSpan + 0.10),
       winFrameMatTop
     );
-    winBack.position.set(side * (bodyW/2 + SURFACE_DZ - 0.02), winY, 0);
+    winBack.position.set(side * (bodyW/2 + 0.04), winY, 0);
     car.add(winBack);
-    // Dark glass strip — thick, opaque dark blue. Sits PROUD of the backing
-    // panel so the glass face is visible from any side viewing angle.
-    const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, winH, windowZSpan), winMat);
+    // Dark glass strip — thick, opaque dark blue, sitting at the protrusion
+    // depth so it's visibly proud of the body shell.
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.10, winH, windowZSpan), winMat);
     win.position.set(xOuter, winY, 0);
     car.add(win);
-    // Top + bottom horizontal frame rails capping the window strip
-    for (const dy of [+winH/2 + 0.05, -winH/2 - 0.05]){
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.10, windowZSpan + 0.10), winFrameMatTop);
-      rail.position.set(xOuter, winY + dy, 0);
+    // Chrome bezel framing the whole window strip — top and bottom rails
+    // PLUS two short end caps so the bezel reads as a closed-perimeter
+    // frame rather than open-ended rails.
+    for (const dy of [+winH/2 + 0.06, -winH/2 - 0.06]){
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.12, windowZSpan + 0.20), chromeFrameMat);
+      rail.position.set(xFrame, winY + dy, 0);
       car.add(rail);
     }
-    // Vertical mullions every ~1.85 m — thicker so they read as real
-    // pillars between adjacent windows
+    for (const dz of [-(windowZSpan/2 + 0.10), +(windowZSpan/2 + 0.10)]){
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.10, winH + 0.24, 0.10), chromeFrameMat);
+      cap.position.set(xFrame, winY, dz);
+      car.add(cap);
+    }
+    // Vertical mullions every ~1.85 m — thick steel pillars splitting
+    // the bay into individual coach windows.
     const mullionCount = Math.max(2, Math.round(windowZSpan / 1.85));
     for (let k = 1; k < mullionCount; k++){
       const u = k / mullionCount;
       const z = -windowZSpan/2 + u * windowZSpan;
-      const mul = new THREE.Mesh(new THREE.BoxGeometry(0.08, winH + 0.12, 0.08), winFrameMatTop);
-      mul.position.set(xOuter, winY, z);
+      const mul = new THREE.Mesh(new THREE.BoxGeometry(0.10, winH + 0.16, 0.10), chromeFrameMat);
+      mul.position.set(xFrame, winY, z);
       car.add(mul);
     }
   }
