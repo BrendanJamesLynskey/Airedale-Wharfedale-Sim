@@ -52,6 +52,12 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 #tp-aws{right:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(255,170,0,0.18);}
 #tp-dsd{right:6vw;top:14vh;width:12vw;max-width:80px;height:7vh;max-height:50px;background:rgba(255,80,80,0.18);}
 #tp-pause{left:6vw;top:6vh;width:12vw;max-width:80px;height:7vh;max-height:50px;}
+/* Show/hide-all-pads toggle — stays visible so the user can bring the
+   pads back even when everything else is hidden. Sits top-centre between
+   PAUSE and AWS. When tapped it flips the .ui-off class on #touch. */
+#tp-ui{left:50%;transform:translateX(-50%);top:6vh;width:18vw;max-width:90px;height:5vh;max-height:38px;font-size:0.62rem;letter-spacing:0.14em;opacity:0.7;}
+#touch.ui-off .pad:not(#tp-ui){display:none !important;}
+#touch.ui-off #tp-ui{opacity:1;}
 /* Free-cam pads — hidden in cab cam, shown when #touch carries the .fc class.
    The CAM toggle (top-right, below DSD) flips the camera mode and the class.
    Selectors below use the #touch ancestor (specificity 2 IDs) so they win
@@ -164,6 +170,7 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
   <div class="pad" id="tp-fc-right">RIGHT</div>
   <div class="pad" id="tp-fc-up">UP</div>
   <div class="pad" id="tp-fc-down">DOWN</div>
+  <div class="pad" id="tp-ui">▽ HIDE</div>
 </div>
 
 <div id="pause">
@@ -5996,6 +6003,16 @@ bindPad('tp-fc-left',  ()=>{ TOUCH_FC.left  = true; }, ()=>{ TOUCH_FC.left  = fa
 bindPad('tp-fc-right', ()=>{ TOUCH_FC.right = true; }, ()=>{ TOUCH_FC.right = false; });
 bindPad('tp-fc-up',    ()=>{ TOUCH_FC.up    = true; }, ()=>{ TOUCH_FC.up    = false; });
 bindPad('tp-fc-down',  ()=>{ TOUCH_FC.down  = true; }, ()=>{ TOUCH_FC.down  = false; });
+// Show/hide-all toggle. Flips a .ui-off class on #touch; the CSS rule
+// "#touch.ui-off .pad:not(#tp-ui)" hides every other pad while leaving
+// this one tappable so the user can bring them back.
+bindPad('tp-ui', ()=>{
+  const touch = document.getElementById('touch');
+  const pad = document.getElementById('tp-ui');
+  const off = !touch.classList.contains('ui-off');
+  touch.classList.toggle('ui-off', off);
+  pad.textContent = off ? '△ SHOW' : '▽ HIDE';
+});
 
 // Detect touch device
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
