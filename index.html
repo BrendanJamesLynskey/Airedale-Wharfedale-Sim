@@ -5229,146 +5229,158 @@ function buildCarBody(carLen, opts){
     coupler.position.set(0, 0.85, z);
     car.add(coupler);
   }
-  // === Cab face — properly raked Class 700-style nose with stacked lower
-  // (near-vertical) and upper (sloped) yellow panels, transparent
-  // windscreen on the upper face, snowplough, destination strip, wipers,
-  // headlights, tail lamps and bezels. Called for the leading end of car
-  // 0 (dir=+1) and the trailing end of the final car (dir=-1). ===
+  // === Cab face — Class 700 (Siemens Desiro City) styled front. The
+  // real unit has a SMOOTH rounded yellow nose that wraps from the
+  // roof down past a tilted windscreen to a small front bumper carrying
+  // the coupler cover. Headlight clusters sit either side of the windscreen
+  // at lower-middle height. Built from heavily-bevelled rounded boxes
+  // so the silhouette reads as a curved nose rather than stacked slabs.
+  // Called for the leading end of car 0 (dir=+1) and the trailing end
+  // of the final car (dir=-1). ===
   function addCabFace(dir){
-    const yellowMat = new THREE.MeshStandardMaterial({ color: 0xfdcc00, metalness: 0.05, roughness: 0.55 });
-    // ---- Lower nose panel — vertical, the BR-yellow warning face ----
-    const lowerNoseW = bodyW * 0.94;
-    const lowerNoseH = 1.5;
-    const lowerNoseD = 0.7;
-    const lowerNose = new THREE.Mesh(
-      roundedBoxGeo(lowerNoseW, lowerNoseH, lowerNoseD, 0.12),
-      yellowMat
-    );
-    lowerNose.position.set(0, bodyBaseY + 0.15 + lowerNoseH/2, dir * (bodyLen/2 + lowerNoseD/2));
-    car.add(lowerNose);
-    // ---- Upper raked nose — windscreen mount tilted ~30° back ----
-    const upperNoseW = bodyW * 0.92;
-    const upperNoseH = 1.20;
-    const upperNoseD = 0.5;
-    // Bottom of upper nose at (y=2.55, z=bodyLen/2+0.7); top at (y=3.75, z=bodyLen/2).
-    // Tilt angle = atan2(0.7, 1.20) ≈ 30.3° — top tilts back into the body.
-    const tilt = Math.atan2(0.70, 1.20);
-    const upperNose = new THREE.Mesh(
-      roundedBoxGeo(upperNoseW, upperNoseH, upperNoseD, 0.10),
-      yellowMat
-    );
-    upperNose.position.set(0, bodyBaseY + 1.50 + upperNoseH/2, dir * (bodyLen/2 + 0.35));
-    upperNose.rotation.x = -dir * tilt;
-    car.add(upperNose);
-    // ---- Windscreen — dark glass on the raked nose. Opaque dark blue
-    // reads as a windscreen from any distance; transparent windscreens
-    // were nearly invisible at the previous 0.45 opacity. A black bezel
-    // frames the glass on all four sides so the windscreen has a clear
-    // visual boundary against the yellow nose. ----
-    const wsW = bodyW * 0.84;
-    const wsH = 1.50;
+    const yellowMat      = new THREE.MeshStandardMaterial({ color: 0xfdcc00, metalness: 0.05, roughness: 0.55 });
+    const blackTrimMat   = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.05, roughness: 0.55 });
+    const couplerCoverMat= new THREE.MeshStandardMaterial({ color: 0x0c0d10, metalness: 0.05, roughness: 0.70 });
+    const bodyFront = bodyLen / 2;
+    // ---- Main raked nose — ONE large heavily-bevelled rounded box tilted
+    // back about 17° so the top edge sits over the body roof line and the
+    // bottom edge juts forward into a stubby front bumper. Large bevel
+    // (0.45 m corner radius) softens the silhouette into the smooth curve
+    // characteristic of the Desiro City front. ----
+    const noseW = bodyW * 0.94;
+    const noseH = bodyH * 0.86;     // ≈ 2.36 m, leaves space for under-bumper
+    const noseD = 0.72;
+    const noseTilt = 0.30;          // ≈ 17° back-rake
+    const noseY = bodyBaseY + noseH / 2 + 0.18;
+    const noseZ = bodyFront + 0.18;
+    const nose = new THREE.Mesh(roundedBoxGeo(noseW, noseH, noseD, 0.45), yellowMat);
+    nose.position.set(0, noseY, dir * noseZ);
+    nose.rotation.x = -dir * noseTilt;
+    car.add(nose);
+    // ---- Lower bumper — a smaller heavily-bevelled box forward of the
+    // main nose, sitting just above rail-level. This is the bit of the
+    // Class 700 front below the headlight band that houses the coupler
+    // cover and the snowplough — visible as a snub forward of the
+    // windscreen face. ----
+    const bumpW = bodyW * 0.86;
+    const bumpH = 0.85;
+    const bumpD = 0.55;
+    const bump = new THREE.Mesh(roundedBoxGeo(bumpW, bumpH, bumpD, 0.18), yellowMat);
+    bump.position.set(0, bodyBaseY + bumpH / 2 - 0.10, dir * (bodyFront + 0.55));
+    car.add(bump);
+    // ---- Roof transition — a slim yellow patch closing the gap between
+    // the body roof and the top of the raked nose. ----
+    const roofPatch = new THREE.Mesh(roundedBoxGeo(bodyW * 0.92, 0.20, 0.32, 0.08), yellowMat);
+    roofPatch.position.set(0, bodyBaseY + bodyH - 0.06, dir * (bodyFront + 0.04));
+    car.add(roofPatch);
+    // ---- Windscreen — wraparound feel via a wide pane that fits onto
+    // the raked face of the main nose. Tilt matches the nose tilt so the
+    // glass sits flush with the surface. ----
+    const wsW = bodyW * 0.80;
+    const wsH = 0.78;
+    const wsY = bodyBaseY + 2.30;
+    const wsZ = bodyFront + 0.55;
     const wsMat = new THREE.MeshStandardMaterial({
-      color: 0x0a1424, metalness: 0.05, roughness: 0.15,
+      color: 0x0a1424, metalness: 0.05, roughness: 0.18,
     });
-    const wsFrameMat = new THREE.MeshStandardMaterial({
-      color: 0x16181c, metalness: 0.05, roughness: 0.55,
-    });
-    // Frame — slightly larger than the glass, sits a fraction behind so
-    // it shows around the edge as a chrome/black bezel.
+    // Black bezel slightly oversized, sitting fractionally behind the glass
     const wsFrame = new THREE.Mesh(
-      new THREE.PlaneGeometry(wsW + 0.16, wsH + 0.16),
-      wsFrameMat
+      new THREE.PlaneGeometry(wsW + 0.14, wsH + 0.14),
+      blackTrimMat
     );
-    wsFrame.position.set(0, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.545));
-    wsFrame.rotation.x = -dir * tilt;
+    wsFrame.position.set(0, wsY - 0.005, dir * (wsZ - 0.012));
+    wsFrame.rotation.x = -dir * noseTilt;
     if (dir < 0) wsFrame.rotation.y = Math.PI;
     car.add(wsFrame);
-    // Glass pane on top
     const ws = new THREE.Mesh(new THREE.PlaneGeometry(wsW, wsH), wsMat);
-    ws.position.set(0, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.555));
-    ws.rotation.x = -dir * tilt;
+    ws.position.set(0, wsY, dir * wsZ);
+    ws.rotation.x = -dir * noseTilt;
     if (dir < 0) ws.rotation.y = Math.PI;
     car.add(ws);
-    // Centre pillar dividing the windscreen into left / right panes
-    // (real Class 700 has a slim vertical mullion between two glass panels)
+    // Centre pillar splitting the windscreen into left + right panes
     const wsCenterPillar = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.08, wsH),
-      wsFrameMat
+      new THREE.PlaneGeometry(0.06, wsH),
+      blackTrimMat
     );
-    wsCenterPillar.position.set(0, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.560));
-    wsCenterPillar.rotation.x = -dir * tilt;
+    wsCenterPillar.position.set(0, wsY, dir * (wsZ + 0.003));
+    wsCenterPillar.rotation.x = -dir * noseTilt;
     if (dir < 0) wsCenterPillar.rotation.y = Math.PI;
     car.add(wsCenterPillar);
-    // ---- Roof transition — small sliver between the raked nose top and body ----
-    const roofPatch = new THREE.Mesh(
-      roundedBoxGeo(bodyW * 0.92, 0.18, 0.3, 0.05),
-      yellowMat
-    );
-    roofPatch.position.set(0, bodyBaseY + bodyH - 0.05, dir * (bodyLen/2 + 0.05));
-    car.add(roofPatch);
-    // ---- Snowplough pilot — black wedge below the bumper ----
-    const ploughMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.05, roughness: 0.7 });
-    const plough = new THREE.Mesh(
-      roundedBoxGeo(bodyW * 0.86, 0.32, 0.55, 0.08),
-      ploughMat
-    );
-    plough.position.set(0, 0.42, dir * (bodyLen/2 + lowerNoseD + 0.10));
-    plough.rotation.x = -dir * 0.30;
-    car.add(plough);
-    // ---- Black coupler cover at the centre of the lower nose ---- a real
-    // Class 700 front is yellow with a black aperture in the lower centre
-    // where the auto-coupler hides behind a sliding cover.
-    const couplerCoverMat = new THREE.MeshStandardMaterial({ color: 0x101216, metalness: 0.05, roughness: 0.65 });
-    const couplerCover = new THREE.Mesh(
-      roundedBoxGeo(1.0, 0.55, 0.06, 0.06),
-      couplerCoverMat
-    );
-    couplerCover.position.set(0, bodyBaseY + 0.35, dir * (bodyLen/2 + lowerNoseD + 0.001));
-    car.add(couplerCover);
-    // ---- Destination roller-blind strip above the windscreen ----
+    // ---- Destination dot-matrix display — embedded in the forehead band
+    // above the windscreen, glowing amber. ----
     const destMat = new THREE.MeshStandardMaterial({
-      color: 0x141414, emissive: 0xff8420, emissiveIntensity: 0.35,
+      color: 0x141414, emissive: 0xff8420, emissiveIntensity: 0.45,
       metalness: 0.05, roughness: 0.5,
     });
-    const dest = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.7, 0.22, 0.08), destMat);
-    dest.position.set(0, bodyBaseY + bodyH - 0.18, dir * (bodyLen/2 + 0.20));
+    const dest = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.64, 0.16, 0.04), destMat);
+    dest.position.set(0, bodyBaseY + bodyH - 0.10, dir * (bodyFront + 0.30));
+    dest.rotation.x = -dir * noseTilt * 0.6;
     car.add(dest);
-    // ---- Wipers — two stowed arms across the windscreen ----
-    const wiperMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.05, roughness: 0.55 });
-    for (const dx of [-0.7, 0.0]){
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.85, 0.025), wiperMat);
-      arm.position.set(dx + 0.35, bodyBaseY + 2.10, dir * (bodyLen/2 + 0.58));
-      arm.rotation.x = -dir * tilt;
-      arm.rotation.z = -0.15;
-      car.add(arm);
-    }
-    // ---- Headlight bezels + lamps + tail lamps inset into the lower nose face ----
-    const bezelMat = new THREE.MeshStandardMaterial({ color: 0x202428, metalness: 0.05, roughness: 0.5 });
-    for (const dx of [-0.8, 0.8]){
-      const bezel = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 16), bezelMat);
-      bezel.position.set(dx, bodyBaseY + 1.10, dir * (bodyLen/2 + lowerNoseD - 0.03));
-      bezel.rotation.x = Math.PI/2;
-      car.add(bezel);
-    }
+    // ---- Headlight clusters — rectangular dark housings flanking the
+    // windscreen at lower-middle height, each carrying a main beam, a
+    // position light, and a red tail lamp stacked vertically. This is the
+    // most-recognisable feature of the Class 700 face. ----
+    const bezelMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.05, roughness: 0.5 });
+    const mainBeamMat = new THREE.MeshStandardMaterial({
+      color: 0xfff8d8, emissive: 0xffeec0, emissiveIntensity: 0.75,
+      metalness: 0.05, roughness: 0.30,
+    });
+    const positionLampMat = new THREE.MeshStandardMaterial({
+      color: 0xfffae0, emissive: 0xffeeaa, emissiveIntensity: 0.40,
+      metalness: 0.05, roughness: 0.30,
+    });
     const tailMat = new THREE.MeshStandardMaterial({
-      color: 0xff5050, emissive: 0xcc1010, emissiveIntensity: 0.45,
+      color: 0xff5050, emissive: 0xcc1010, emissiveIntensity: 0.50,
       metalness: 0.05, roughness: 0.45,
     });
-    for (const dx of [-0.45, 0.45]){
-      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.04, 12), tailMat);
-      tail.position.set(dx, bodyBaseY + 0.55, dir * (bodyLen/2 + lowerNoseD + 0.005));
-      tail.rotation.x = Math.PI/2;
+    for (const dx of [-0.95, 0.95]){
+      // Cluster housing — rectangular black bezel inset into the nose face
+      const cluster = new THREE.Mesh(roundedBoxGeo(0.36, 0.46, 0.08, 0.05), bezelMat);
+      cluster.position.set(dx, bodyBaseY + 1.55, dir * (bodyFront + 0.78));
+      cluster.rotation.x = -dir * noseTilt;
+      car.add(cluster);
+      // Main beam (top lamp)
+      const main = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.04, 16), mainBeamMat);
+      main.position.set(dx, bodyBaseY + 1.72, dir * (bodyFront + 0.82));
+      main.rotation.x = Math.PI / 2 - dir * noseTilt;
+      car.add(main);
+      // Position light (middle)
+      const pos = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), positionLampMat);
+      pos.position.set(dx, bodyBaseY + 1.52, dir * (bodyFront + 0.82));
+      pos.rotation.x = Math.PI / 2 - dir * noseTilt;
+      car.add(pos);
+      // Tail / marker light (bottom)
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), tailMat);
+      tail.position.set(dx, bodyBaseY + 1.36, dir * (bodyFront + 0.82));
+      tail.rotation.x = Math.PI / 2 - dir * noseTilt;
       car.add(tail);
     }
-    const lightMat = new THREE.MeshStandardMaterial({
-      color: 0xfff5d0, emissive: 0xffeec0, emissiveIntensity: 0.55,
+    // ---- Black coupler cover — wide rectangular recessed black panel at
+    // the bottom-centre of the bumper. Auto-coupler hides behind it. ----
+    const couplerCover = new THREE.Mesh(
+      roundedBoxGeo(1.10, 0.52, 0.04, 0.08),
+      couplerCoverMat
+    );
+    couplerCover.position.set(0, bodyBaseY + 0.20, dir * (bodyFront + 0.83));
+    car.add(couplerCover);
+    // ---- Wipers — two arms across the windscreen ----
+    const wiperMat = new THREE.MeshStandardMaterial({ color: 0x16181c, metalness: 0.05, roughness: 0.55 });
+    for (const dx of [-0.55, 0.55]){
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.62, 0.02), wiperMat);
+      arm.position.set(dx, wsY - 0.20, dir * (wsZ + 0.012));
+      arm.rotation.x = -dir * noseTilt;
+      arm.rotation.z = dx < 0 ? -0.22 : 0.22;
+      car.add(arm);
+    }
+    // ---- Side marker lights low on the yellow nose corners ----
+    const markerMat = new THREE.MeshStandardMaterial({
+      color: 0xfff5d0, emissive: 0xfff0b0, emissiveIntensity: 0.30,
       metalness: 0.05, roughness: 0.3,
     });
-    for (const dx of [-0.8, 0.8]){
-      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 16), lightMat);
-      lamp.position.set(dx, bodyBaseY + 1.10, dir * (bodyLen/2 + lowerNoseD - 0.005));
-      lamp.rotation.x = Math.PI/2;
-      car.add(lamp);
+    for (const dx of [-1.20, 1.20]){
+      const marker = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), markerMat);
+      marker.position.set(dx, bodyBaseY + 1.05, dir * (bodyFront + 0.78));
+      car.add(marker);
     }
   }
   if (frontCab) addCabFace(+1);
