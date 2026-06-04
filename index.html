@@ -4680,12 +4680,14 @@ function buildCab700(spec){
   // surface (no raised housing), so we drop the block and let the DMI
   // bezel below handle the frame. The CCTV monitor strip that does live
   // up by the headliner is added separately below the windscreen frame.
-  // === CCTV / info strip ABOVE the windscreen — a slim panel mounted
-  // up against the headliner, well clear of the driver's forward view. ===
+  // === CCTV / info strip ABOVE the windscreen — sits embedded in the
+  // headliner band (at y ≈ 2.30, just above windscreen top y = 2.195) so
+  // it's clearly OUT of the driver's forward sightline. Previously y = 2.10
+  // dipped 0.10 m into the upper windscreen view. ===
   const cctvHousingMat = new THREE.MeshStandardMaterial({ color: 0x16181c, roughness: 0.55, metalness: 0.05 });
-  const cctvHousing = new THREE.Mesh(roundedBoxGeo(2.40, 0.18, 0.10, 0.025), cctvHousingMat);
-  cctvHousing.position.set(0, 2.10, -0.65);
-  cctvHousing.rotation.x = -0.08;
+  const cctvHousing = new THREE.Mesh(roundedBoxGeo(2.40, 0.18, 0.08, 0.025), cctvHousingMat);
+  cctvHousing.position.set(0, 2.30, -0.40);
+  cctvHousing.rotation.x = -0.18;
   g.add(cctvHousing);
   // Four CCTV monitor screens embedded in the housing — emissive so they
   // glow faintly like a real platform-view feed.
@@ -4696,14 +4698,14 @@ function buildCab700(spec){
   for (let i = 0; i < 4; i++){
     const sx = -0.90 + i * 0.60;
     const sc = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.12), cctvScreenMat);
-    sc.position.set(sx, 2.10, -0.595);
-    sc.rotation.x = -0.08;
+    sc.position.set(sx, 2.30, -0.355);
+    sc.rotation.x = -0.18;
     g.add(sc);
   }
   // Slim blue accent trim under the CCTV strip
   const blueTrim = new THREE.Mesh(roundedBoxGeo(2.40, 0.03, 0.03, 0.008), trimBlueMat);
-  blueTrim.position.set(0, 2.00, -0.63);
-  blueTrim.rotation.x = -0.08;
+  blueTrim.position.set(0, 2.20, -0.39);
+  blueTrim.rotation.x = -0.18;
   g.add(blueTrim);
 
   // === DMI — single large landscape screen dominating the centre ===
@@ -4790,13 +4792,20 @@ function buildCab700(spec){
     new THREE.PlaneGeometry(1.30, 0.81),
     new THREE.MeshBasicMaterial({ map: dmiTex })
   );
-  dmiPlane.position.set(0, 1.57, -0.30);
-  dmiPlane.rotation.x = 0.30;
+  // DMI and bezel sit lower than the previous y = 1.57 so the screen lives
+  // near the desk surface rather than at eye-level (where it was filling
+  // most of the forward view). Bezel is positioned BEHIND the screen plane
+  // so it shows around the DMI's edges as a thin black border rather than
+  // covering the screen — the previous z = -0.295 (in front of DMI at
+  // z = -0.30) was a solid 1.38 × 0.89 black box blocking the DMI entirely,
+  // which is what the user kept reporting as "a black panel blocking the
+  // driver's view of the windscreen".
+  dmiPlane.position.set(0, 1.20, -0.42);
+  dmiPlane.rotation.x = 0.50;
   g.add(dmiPlane);
-  // DMI bezel
   const dmiBezel = new THREE.Mesh(roundedBoxGeo(1.38, 0.89, 0.03, 0.012), blackMat);
-  dmiBezel.position.set(0, 1.57, -0.295);
-  dmiBezel.rotation.x = 0.30;
+  dmiBezel.position.set(0, 1.18, -0.44);
+  dmiBezel.rotation.x = 0.50;
   g.add(dmiBezel);
 
   // === TMS — small status screen on the left ===
@@ -4815,8 +4824,8 @@ function buildCab700(spec){
     for (let i = 0; i < rows.length; i++) tmsCtx.fillText(rows[i], 20, 60 + i * 30);
   })();
   const tmsPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.28), new THREE.MeshBasicMaterial({ map: tmsTex }));
-  tmsPlane.position.set(-0.92, 1.57, -0.30);
-  tmsPlane.rotation.x = 0.30;
+  tmsPlane.position.set(-0.92, 1.20, -0.42);
+  tmsPlane.rotation.x = 0.50;
   g.add(tmsPlane);
   // ETCS placeholder on the right
   const etcsCanvas = document.createElement('canvas');
@@ -4837,8 +4846,8 @@ function buildCab700(spec){
     etcsCtx.fillText('FALLBACK TPWS/AWS', 192, 170);
   })();
   const etcsPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.28), new THREE.MeshBasicMaterial({ map: etcsTex }));
-  etcsPlane.position.set(0.92, 1.57, -0.30);
-  etcsPlane.rotation.x = 0.30;
+  etcsPlane.position.set(0.92, 1.20, -0.42);
+  etcsPlane.rotation.x = 0.50;
   g.add(etcsPlane);
 
   // === Master controller — to the driver's right. With the centrally-
