@@ -437,6 +437,7 @@ const TRAINS = {
     brakeNotches: 6,
     davisA: 0.85,  davisB: 0.011,  davisC: 0.00016,
     cabBuilder: 'buildCab700',         // bespoke Class 700 cab — distinct from the 331's Civity cab
+    eyeOffsetX: 0.0,                   // Class 700 has a CENTRAL driving position, unlike the 333/331's left-side driver
     tmsLabel: 'CLASS 700/0  DMI',
     speedoUnits: 'CLASS 700/0',
     // Audio: Siemens Desiro City — Bombardier MITRAC IGBT drive sits even
@@ -4672,14 +4673,20 @@ function buildCab700(spec){
   woodTrim.position.set(0, 1.04, -0.74);
   woodTrim.rotation.x = 0.10;
   g.add(woodTrim);
-  // Dashboard housing rising up behind the desk to carry the screens
-  const dashHouse = new THREE.Mesh(roundedBoxGeo(2.8, 0.65, 0.40, 0.06), dashMat);
-  dashHouse.position.set(0, 1.47, -0.10);
+  // Dashboard housing — compact frame around the central DMI only. Real
+  // Class 700 dashboards are dominated by a single large central screen
+  // set into a slim bezel; the housing here is sized to that bezel rather
+  // than spanning the full 2.8 m desk width (which was the "black object
+  // blocking the view" the user reported). Lighter dashMat too, so the
+  // panel reads as a steel / grey console rather than a black slab.
+  const dashHouseMat = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.55, metalness: 0.05 });
+  const dashHouse = new THREE.Mesh(roundedBoxGeo(1.55, 0.42, 0.18, 0.04), dashHouseMat);
+  dashHouse.position.set(0, 1.40, -0.15);
   dashHouse.rotation.x = 0.30;
   g.add(dashHouse);
-  // Blue trim strip along the top of the dashboard
-  const blueTrim = new THREE.Mesh(roundedBoxGeo(2.7, 0.05, 0.06, 0.012), trimBlueMat);
-  blueTrim.position.set(0, 1.79, -0.18);
+  // Blue trim strip across the top of the housing
+  const blueTrim = new THREE.Mesh(roundedBoxGeo(1.50, 0.04, 0.04, 0.008), trimBlueMat);
+  blueTrim.position.set(0, 1.60, -0.20);
   blueTrim.rotation.x = 0.30;
   g.add(blueTrim);
 
@@ -4818,21 +4825,20 @@ function buildCab700(spec){
   etcsPlane.rotation.x = 0.30;
   g.add(etcsPlane);
 
-  // === Master controller — single lever on the right of the desk ===
-  // (slight forward bias on Z so it sits at the leading edge of the desk)
+  // === Master controller — to the driver's right. With the centrally-
+  // driven Class 700, "right of driver" puts the lever just right of cab
+  // centre. ===
   const cBase = new THREE.Mesh(roundedBoxGeo(0.22, 0.10, 0.22, 0.025), chromeMat);
-  cBase.position.set(0.15, 1.13, -0.42);
+  cBase.position.set(0.45, 1.13, -0.42);
   g.add(cBase);
   const lever = new THREE.Mesh(roundedBoxGeo(0.05, 0.42, 0.05, 0.015), blackMat);
-  lever.position.set(0.15, 1.36, -0.42);
+  lever.position.set(0.45, 1.36, -0.42);
   g.add(lever);
-  // Knob on top of the lever
   const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), blackMat);
-  knob.position.set(0.15, 1.58, -0.42);
+  knob.position.set(0.45, 1.58, -0.42);
   g.add(knob);
-  // Notch position indicator
   const notchDot = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.005, 12), ledOnMat);
-  notchDot.position.set(0.25, 1.18, -0.42);
+  notchDot.position.set(0.55, 1.18, -0.42);
   notchDot.rotation.x = Math.PI/2;
   g.add(notchDot);
 
@@ -4863,24 +4869,24 @@ function buildCab700(spec){
   })();
   const awsMat = new THREE.MeshBasicMaterial({ map: awsTexN });
   const aws = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), awsMat);
-  aws.position.set(0.55, 1.17, -0.36);
+  aws.position.set(0.85, 1.17, -0.36);
   aws.rotation.x = 0.10;
   g.add(aws);
   // DRA — large illuminated red mushroom
   const draMat = new THREE.MeshStandardMaterial({ color: 0xa01818, emissive: 0x600808, emissiveIntensity: 0.0, roughness: 0.5, metalness: 0.05 });
   const draBase = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.04, 16), chromeMat);
-  draBase.position.set(0.78, 1.16, -0.40);
+  draBase.position.set(1.08, 1.16, -0.40);
   g.add(draBase);
   const draCap = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.04, 16), draMat);
-  draCap.position.set(0.78, 1.20, -0.40);
+  draCap.position.set(1.08, 1.20, -0.40);
   g.add(draCap);
   // Emergency Brake Plunger — large red shrouded mushroom
   const ebpRing = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 16), blackMat);
-  ebpRing.position.set(1.00, 1.16, -0.42);
+  ebpRing.position.set(1.30, 1.16, -0.42);
   g.add(ebpRing);
   const ebpMat = new THREE.MeshStandardMaterial({ color: 0xcc1010, roughness: 0.45, metalness: 0.05 });
   const ebp = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.06, 16), ebpMat);
-  ebp.position.set(1.00, 1.24, -0.42);
+  ebp.position.set(1.30, 1.24, -0.42);
   g.add(ebp);
 
   // === TPWS panel — yellow-trimmed unit on the left of the desk ===
@@ -4940,19 +4946,20 @@ function buildCab700(spec){
   const swWipers  = rocker(-1.32, 1.14, -0.42, 0xc0c8d0);
   const swCabLight= rocker(-1.42, 1.14, -0.42, 0xc0c8d0);
 
-  // === Driver seat — left side of cab (driver position x=-0.7) ===
+  // === Driver seat — CENTRAL position (Class 700 is notable for its
+  // centrally-driven cab; spec.eyeOffsetX=0 puts the camera here too) ===
   const seatBase = new THREE.Mesh(roundedBoxGeo(0.55, 0.10, 0.50, 0.05), seatMat);
-  seatBase.position.set(-0.7, 0.55, 0.50);
+  seatBase.position.set(0, 0.55, 0.50);
   g.add(seatBase);
   const seatBack = new THREE.Mesh(roundedBoxGeo(0.55, 0.70, 0.10, 0.05), seatMat);
-  seatBack.position.set(-0.7, 0.95, 0.75);
+  seatBack.position.set(0, 0.95, 0.75);
   seatBack.rotation.x = -0.12;
   g.add(seatBack);
   const seatHead = new THREE.Mesh(roundedBoxGeo(0.30, 0.22, 0.10, 0.04), seatMat);
-  seatHead.position.set(-0.7, 1.42, 0.74);
+  seatHead.position.set(0, 1.42, 0.74);
   g.add(seatHead);
   const seatStem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55, 12), blackMat);
-  seatStem.position.set(-0.7, 0.25, 0.50);
+  seatStem.position.set(0, 0.25, 0.50);
   g.add(seatStem);
 
   // === Wipers visible across the windscreen ===
@@ -5021,6 +5028,14 @@ function buildAndAttachCab(spec){
   cab = buildCab(spec);
   cabGroup.add(cab.group);
   _builtCabKey = spec.key;
+  // Camera-local position is the driver-eye offset inside the cab. Default
+  // is left-side (x=-0.7) for the 333/331; the 700 has a central driving
+  // position so its spec sets eyeOffsetX=0. Free cam manages its own
+  // camera transform, so only update when not in free cam.
+  if (!GS.freeCam){
+    const ex = spec.eyeOffsetX ?? -0.7;
+    camera.position.set(ex, 1.85, 0.30);
+  }
   // Lineside stop-markers (Shipley's "N CAR" plate) follow the active unit.
   repaintStopMarkers();
   // External multi-car body so the unit reads as a real train from free cam.
@@ -5051,9 +5066,12 @@ function buildCarBody(carLen, opts){
   // metalness must be ~0 because the scene has no environment map — a
   // metallic material with no reflection probe just renders BLACK.
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f6, metalness: 0.05, roughness: 0.55 });
-  const winMat  = new THREE.MeshStandardMaterial({ color: 0x0c1422, metalness: 0.05, roughness: 0.25, transparent: true, opacity: 0.8 });
+  const winMat  = new THREE.MeshStandardMaterial({ color: 0x0c1422, metalness: 0.05, roughness: 0.25, transparent: true, opacity: 0.85 });
   const winFrameMat = new THREE.MeshStandardMaterial({ color: 0x303338, metalness: 0.05, roughness: 0.6 });
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0xc4c8cd, metalness: 0.05, roughness: 0.6 });
+  // Thameslink livery — pastel blue doors against the white body. The
+  // previous light-grey doors blended into the body shell; pastel blue
+  // matches the real Class 700 livery and reads clearly from outside.
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x9ec5e8, metalness: 0.05, roughness: 0.55 });
   const bogieMat = new THREE.MeshStandardMaterial({ color: 0x303338, metalness: 0.05, roughness: 0.85 });
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, metalness: 0.05, roughness: 0.55 });
   // Body shell — softened cube
@@ -5067,55 +5085,70 @@ function buildCarBody(carLen, opts){
   const winY = bodyBaseY + 1.85;
   const winH = 0.95;
   const winFrameMatTop = winFrameMat;
+  // Z-fight margin: the body shell's outer surface is at x = ±bodyW/2 =
+  // ±1.39. Any window / door / frame mesh placed with its INNER face at
+  // ±1.39 fought the body for depth, which is why "the windows and doors
+  // are not visible from outside". Pull every external surface out to
+  // x = ±(bodyW/2 + 0.035) = ±1.425 with thin meshes that leave a clean
+  // gap from the shell.
+  const SURFACE_DZ = 0.035;
   for (const side of [-1, 1]){
-    const xOuter = side * (bodyW/2 + 0.01);
+    const xOuter = side * (bodyW/2 + SURFACE_DZ);
     // Dark glass strip
-    const win = new THREE.Mesh(new THREE.BoxGeometry(0.02, winH, windowZSpan), winMat);
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.025, winH, windowZSpan), winMat);
     win.position.set(xOuter, winY, 0);
     car.add(win);
-    // Top + bottom horizontal frame rails
+    // Top + bottom horizontal frame rails (slightly outside the glass)
     for (const dy of [+winH/2 + 0.04, -winH/2 - 0.04]){
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.07, windowZSpan + 0.04), winFrameMatTop);
-      rail.position.set(side * (bodyW/2 + 0.005), winY + dy, 0);
+      rail.position.set(xOuter, winY + dy, 0);
       car.add(rail);
     }
-    // Vertical mullions — every ~1.85 m
+    // Vertical mullions every ~1.85 m
     const mullionCount = Math.max(2, Math.round(windowZSpan / 1.85));
     for (let k = 1; k < mullionCount; k++){
       const u = k / mullionCount;
       const z = -windowZSpan/2 + u * windowZSpan;
-      const mul = new THREE.Mesh(new THREE.BoxGeometry(0.025, winH + 0.06, 0.045), winFrameMatTop);
-      mul.position.set(side * (bodyW/2 + 0.005), winY, z);
+      const mul = new THREE.Mesh(new THREE.BoxGeometry(0.025, winH + 0.06, 0.05), winFrameMatTop);
+      mul.position.set(xOuter, winY, z);
       car.add(mul);
     }
   }
-  // Sliding doors — 2 per side, each with a window pane + thin frame
+  // Sliding doors — 2 per side, each with a window pane + thin frame +
+  // an above-door indicator LED. All mounted on the outer face of the
+  // body shell so they read as separate panels from outside.
   const doorSpan = bodyLen - 6;
   for (const side of [-1, 1]){
+    const doorXOuter = side * (bodyW/2 + SURFACE_DZ);
     for (let d = 0; d < 2; d++){
       const z = -doorSpan/2 + d * doorSpan;
-      const xOuter = side * (bodyW/2 + 0.015);
-      // Door leaf
-      const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.1, 1.45), doorMat);
-      door.position.set(xOuter, bodyBaseY + 1.42, z);
+      // Door leaf — thinner so it sits flush against the body without
+      // poking through to the inside (where the cab interior lives).
+      const door = new THREE.Mesh(new THREE.BoxGeometry(0.025, 2.05, 1.45), doorMat);
+      door.position.set(doorXOuter, bodyBaseY + 1.42, z);
       car.add(door);
       // Upper-half window in the door
-      const doorWin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.85, 1.05), winMat);
-      doorWin.position.set(side * (bodyW/2 + 0.025), bodyBaseY + 1.85, z);
+      const doorWin = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.85, 1.05), winMat);
+      doorWin.position.set(side * (bodyW/2 + SURFACE_DZ + 0.005), bodyBaseY + 1.85, z);
       car.add(doorWin);
-      // Frame around the door (thin lines top/bottom/sides)
-      for (const dy of [+0.43, -0.43]){
-        const fr = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 1.20), winFrameMatTop);
-        fr.position.set(side * (bodyW/2 + 0.022), bodyBaseY + 1.85 + dy, z);
+      // Vertical seam down the centre of the door (Class 700 doors are a
+      // two-leaf bi-parting split)
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.027, 2.0, 0.025), winFrameMatTop);
+      seam.position.set(doorXOuter, bodyBaseY + 1.42, z);
+      car.add(seam);
+      // Frame around the door — top/bottom rails
+      for (const dy of [+1.07, -0.03]){
+        const fr = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.03, 1.50), winFrameMatTop);
+        fr.position.set(doorXOuter, bodyBaseY + 1.42 + dy, z);
         car.add(fr);
       }
-      // Small indicator LED above the door
+      // Indicator LED above the door
       const indMat = new THREE.MeshStandardMaterial({
-        color: 0x40aaff, emissive: 0x1060c0, emissiveIntensity: 0.35,
+        color: 0x40aaff, emissive: 0x1060c0, emissiveIntensity: 0.4,
         metalness: 0.05, roughness: 0.4,
       });
       const ind = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), indMat);
-      ind.position.set(side * (bodyW/2 + 0.02), bodyBaseY + 2.40, z);
+      ind.position.set(doorXOuter, bodyBaseY + 2.50, z);
       car.add(ind);
     }
   }
@@ -5199,6 +5232,16 @@ function buildCarBody(carLen, opts){
     plough.position.set(0, 0.42, dir * (bodyLen/2 + lowerNoseD + 0.10));
     plough.rotation.x = -dir * 0.30;
     car.add(plough);
+    // ---- Black coupler cover at the centre of the lower nose ---- a real
+    // Class 700 front is yellow with a black aperture in the lower centre
+    // where the auto-coupler hides behind a sliding cover.
+    const couplerCoverMat = new THREE.MeshStandardMaterial({ color: 0x101216, metalness: 0.05, roughness: 0.65 });
+    const couplerCover = new THREE.Mesh(
+      roundedBoxGeo(1.0, 0.55, 0.06, 0.06),
+      couplerCoverMat
+    );
+    couplerCover.position.set(0, bodyBaseY + 0.35, dir * (bodyLen/2 + lowerNoseD + 0.001));
+    car.add(couplerCover);
     // ---- Destination roller-blind strip above the windscreen ----
     const destMat = new THREE.MeshStandardMaterial({
       color: 0x141414, emissive: 0xff8420, emissiveIntensity: 0.35,
@@ -5703,10 +5746,10 @@ function enterFreeCam(){
 function exitFreeCam(){
   GS.freeCam = false;
   camRig.add(camera);                      // reparent back under camRig for the cab follow
-  // Restore the driver-eye offset — matches the initial setup at the top
-  // of the script (driver on the left, head ~1.85 m above rail, slightly
-  // ahead of the seat back).
-  camera.position.set(-0.7, 1.85, 0.30);
+  // Restore the driver-eye offset — defaults to left-side (333/331) but
+  // honours the active spec's eyeOffsetX (0.0 for the centrally-driven 700).
+  const ex = GS.train?.eyeOffsetX ?? -0.7;
+  camera.position.set(ex, 1.85, 0.30);
   showMsg('CAB CAM', 'ok', 1.2);
 }
 
