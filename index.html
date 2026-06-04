@@ -69,6 +69,9 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 #touch #tp-fc-right{left:39vw;bottom:16vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
 #touch #tp-fc-up   {right:6vw;bottom:24vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
 #touch #tp-fc-down {right:6vw;bottom:13vh;width:14vw;max-width:90px;height:9vh;max-height:64px;display:none;}
+/* Station teleport pad — bottom-centre, only visible in free cam (where
+   the HORN normally lives, which is hidden by the .fc swap). */
+#touch #tp-fc-goto{left:50%;transform:translateX(-50%);bottom:1.5vh;width:24vw;max-width:150px;height:7vh;max-height:50px;background:rgba(255,170,0,0.18);font-size:0.62rem;letter-spacing:0.18em;display:none;}
 /* In free cam, hide the train-control pads and show the camera-movement pads. */
 #touch.fc #tp-pwr-up, #touch.fc #tp-pwr-dn,
 #touch.fc #tp-brk-up, #touch.fc #tp-brk-dn,
@@ -76,7 +79,20 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
 #touch.fc #tp-dsd {display:none;}
 #touch.fc #tp-fc-fwd, #touch.fc #tp-fc-back,
 #touch.fc #tp-fc-left, #touch.fc #tp-fc-right,
-#touch.fc #tp-fc-up, #touch.fc #tp-fc-down {display:flex;}
+#touch.fc #tp-fc-up, #touch.fc #tp-fc-down,
+#touch.fc #tp-fc-goto {display:flex;}
+/* Station teleport list panel — popup over the canvas when GO TO is tapped.
+   Rows are tappable; tapping one teleports the free-cam to that station
+   and closes the panel. */
+#stnList{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(8,16,28,0.93);border:1px solid rgba(92,200,255,0.55);border-radius:14px;padding:0.9rem 0.7rem 0.7rem;color:#cfe6f7;font-family:'Orbitron',sans-serif;z-index:60;display:none;max-height:74vh;overflow-y:auto;width:min(78vw,320px);box-shadow:0 0 32px rgba(92,200,255,0.18);}
+#stnList.open{display:block;}
+#stnList .ttl{font-size:0.72rem;letter-spacing:0.28em;text-align:center;color:#9ccfff;margin-bottom:0.6rem;}
+#stnList .row{padding:0.55rem 0.6rem;border-bottom:1px solid rgba(92,200,255,0.18);font-size:0.78rem;font-family:'Roboto Mono',monospace;cursor:pointer;display:flex;justify-content:space-between;gap:0.6rem;}
+#stnList .row:last-child{border-bottom:0;}
+#stnList .row:hover,#stnList .row:active{background:rgba(92,200,255,0.22);color:#fff;}
+#stnList .code{color:#9ccfff;flex-shrink:0;}
+#stnList .name{flex:1;text-align:right;color:#cfe6f7;text-transform:capitalize;}
+#stnList .close{position:absolute;top:0.4rem;right:0.7rem;color:rgba(180,210,235,0.7);cursor:pointer;font-size:1.1rem;line-height:1;}
 
 /* Pause overlay */
 #pause{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.78);display:none;flex-direction:column;align-items:center;justify-content:center;color:#cfe6f7;font-family:'Orbitron',sans-serif;}
@@ -170,8 +186,11 @@ canvas{display:block;position:fixed;inset:0;z-index:1;touch-action:none;}
   <div class="pad" id="tp-fc-right">RIGHT</div>
   <div class="pad" id="tp-fc-up">UP</div>
   <div class="pad" id="tp-fc-down">DOWN</div>
+  <div class="pad" id="tp-fc-goto">GO TO</div>
   <div class="pad" id="tp-ui">▽ HIDE</div>
 </div>
+
+<div id="stnList"></div>
 
 <div id="pause">
   <h2>PAUSED</h2>
@@ -5896,8 +5915,11 @@ function toggleFreeCam(){
   for (const k in TOUCH_FC) TOUCH_FC[k] = false;
   const touch = document.getElementById('touch');
   const camPad = document.getElementById('tp-cam');
+  const stnList = document.getElementById('stnList');
   if (touch) touch.classList.toggle('fc', GS.freeCam);
   if (camPad) camPad.textContent = GS.freeCam ? 'CAB' : 'CAM';
+  // Close any lingering teleport popup so it can't sit over the cab view.
+  if (stnList) stnList.classList.remove('open');
 }
 
 window.addEventListener('keydown', e => {
@@ -6003,6 +6025,56 @@ bindPad('tp-fc-left',  ()=>{ TOUCH_FC.left  = true; }, ()=>{ TOUCH_FC.left  = fa
 bindPad('tp-fc-right', ()=>{ TOUCH_FC.right = true; }, ()=>{ TOUCH_FC.right = false; });
 bindPad('tp-fc-up',    ()=>{ TOUCH_FC.up    = true; }, ()=>{ TOUCH_FC.up    = false; });
 bindPad('tp-fc-down',  ()=>{ TOUCH_FC.down  = true; }, ()=>{ TOUCH_FC.down  = false; });
+// Station teleport — GO TO opens a popup list of every station on the
+// active route. Tapping a row places the free-cam camera at that station's
+// world position and points it forward along the track. Useful for
+// jumping along a long line without flying the camera the whole way.
+function teleportFreeCamToStation(stationIdx){
+  if (!GS.freeCam) return;
+  const stations = (ROUTE && ROUTE.stations) || [];
+  if (stationIdx < 0 || stationIdx >= stations.length) return;
+  const s = stations[stationIdx];
+  const p = trackPoint(s.km);
+  // Drop the camera ~3 m above the rail (rough platform-cap height) so the
+  // user lands at a credible standing-on-platform viewpoint rather than
+  // halfway through the trackbed.
+  GS.freeCamPos.set(p.x, p.y + 3, p.z);
+  // Aim along the line of travel so the user's looking the same way the
+  // train would be. Sample a second trackPoint 10 m ahead to find the
+  // forward vector, then match enterFreeCam's yaw convention.
+  const p2 = trackPoint(s.km + 0.01);
+  const fx = p2.x - p.x, fz = p2.z - p.z;
+  if (Math.hypot(fx, fz) > 1e-6){
+    GS.freeCamYaw = Math.atan2(-fx, -fz);
+  }
+  GS.freeCamPitch = 0;
+  showMsg('FREE CAM → ' + (s.name || s.code || ('#' + stationIdx)).toUpperCase(), 'ok', 1.4);
+}
+function openStationList(){
+  if (!GS.freeCam) return;
+  const list = document.getElementById('stnList');
+  const stations = (ROUTE && ROUTE.stations) || [];
+  list.innerHTML = '<div class="close" id="stnListClose">✕</div>' +
+                   '<div class="ttl">TELEPORT TO STATION</div>' +
+                   stations.map((s, i) =>
+                     `<div class="row" data-stn="${i}"><span class="code">${s.code || ''}</span>` +
+                     `<span class="name">${s.name || ''}</span></div>`).join('');
+  list.classList.add('open');
+}
+function closeStationList(){
+  document.getElementById('stnList').classList.remove('open');
+}
+document.getElementById('stnList').addEventListener('click', e => {
+  if (e.target.id === 'stnListClose'){ closeStationList(); return; }
+  const row = e.target.closest('.row');
+  if (!row) return;
+  const idx = parseInt(row.dataset.stn, 10);
+  if (Number.isFinite(idx)){
+    teleportFreeCamToStation(idx);
+    closeStationList();
+  }
+});
+bindPad('tp-fc-goto', ()=>{ if (GS.freeCam) openStationList(); });
 // Show/hide-all toggle. Flips a .ui-off class on #touch; the CSS rule
 // "#touch.ui-off .pad:not(#tp-ui)" hides every other pad while leaving
 // this one tappable so the user can bring them back.
