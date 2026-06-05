@@ -2251,60 +2251,176 @@ function buildScatter(){
   trees.instanceMatrix.needsUpdate = true;
   group.add(trees);
 
-  // BUILDINGS — boxes with brick texture, scattered further out, denser around stations
-  // Weighted by settlement size: Leeds dominates as a city, Skipton/Shipley/
-  // Bingley/Keighley are market towns, and Kirkstall Forge / Apperley Bridge /
-  // Saltaire / Crossflatts / Steeton / Cononley are villages or commuter halts
-  // that should look sparse rather than urban. The previous uniform pick gave
-  // every station the same ~145 buildings, which made small Aire-valley
-  // villages read as towns.
-  const STATION_WEIGHT = {
-    LDS: 30,            // Leeds — major city
-    SKI: 10,            // Skipton — market town
-    SHY:  8, KEI:  8,   // Shipley, Keighley — towns
-    BIY:  6,            // Bingley — town
-    SAE:  2, APY:  2, SON: 2,   // Saltaire / Apperley Bridge / Steeton — villages
-    KLF:  1, CFL:  1, CEY: 1,   // Kirkstall Forge / Crossflatts / Cononley — small halts
-  };
-  const _stnW = ROUTE.stations.map(s => STATION_WEIGHT[s.code] || 1);
-  const _stnWTot = _stnW.reduce((a,b) => a + b, 0);
-  function pickWeightedStation(){
-    let r = rng() * _stnWTot;
-    for (let i = 0; i < ROUTE.stations.length; i++){
-      r -= _stnW[i];
-      if (r <= 0) return ROUTE.stations[i];
+  // HOUSES — paint-tool placement from ROUTE.houses (Yorkshire Line
+  // Editor's Paint tool drops one {km, lat} per stroke point). Replaces
+  // the prior STATION_WEIGHT random scatter; if a loaded map has no
+  // houses array we still fall back to a uniform sprinkle so the
+  // legacy Airedale / Wharfedale maps stay populated.
+  const paintedHouses = (ROUTE.houses || []).filter(h => h && typeof h.km === 'number');
+  if (paintedHouses.length > 0){
+    const hGeo = new THREE.BoxGeometry(1, 1, 1);
+    const hMat = new THREE.MeshStandardMaterial({ map: texBrick, roughness: 0.95 });
+    const hMesh = new THREE.InstancedMesh(hGeo, hMat, paintedHouses.length);
+    for (let i = 0; i < paintedHouses.length; i++){
+      const h = paintedHouses[i];
+      const km = clamp(h.km, 0.02, ROUTE.totalKm - 0.02);
+      const f = trackFrame(km);
+      const p = f.p.clone().add(f.r.clone().multiplyScalar(h.lat || 0));
+      const r1 = ((i * 73 + 11) % 100) / 100;
+      const r2 = ((i * 51 + 7)  % 100) / 100;
+      const r3 = ((i * 89 + 23) % 100) / 100;
+      const w = 4 + r1 * 6, ht = 4 + r2 * 5, d = 4 + r3 * 6;
+      p.y += ht / 2 - 0.5;
+      tmp.position.copy(p);
+      tmp.scale.set(w, ht, d);
+      tmp.rotation.set(0, ((i * 37) % 100) / 100 * PI * 2, 0);
+      tmp.updateMatrix();
+      hMesh.setMatrixAt(i, tmp.matrix);
     }
-    return ROUTE.stations[ROUTE.stations.length - 1];
+    hMesh.instanceMatrix.needsUpdate = true;
+    group.add(hMesh);
+  } else {
+    // Fallback uniform scatter — kept for Airedale / Wharfedale (which
+    // shipped before the Paint tool existed) and for any custom maps
+    // that don't paint houses explicitly.
+    const bldGeo = new THREE.BoxGeometry(1, 1, 1);
+    const bldMat = new THREE.MeshStandardMaterial({ map: texBrick, roughness: 0.95 });
+    const bldCount = QUALITY === 'desktop' ? 800 : 250;
+    const buildings = new THREE.InstancedMesh(bldGeo, bldMat, bldCount);
+    for (let i = 0; i < bldCount; i++){
+      const km = clamp(rng() * ROUTE.totalKm, 0.2, ROUTE.totalKm - 0.2);
+      const f = trackFrame(km);
+      const side = rng() < 0.5 ? -1 : 1;
+      const dist = 45 + rng() * 110;
+      const p = f.p.clone().add(f.r.clone().multiplyScalar(side * dist));
+      const w = 4 + rng()*10, h = 4 + rng()*7, d = 4 + rng()*10;
+      p.y += h/2 - 0.5;
+      tmp.position.copy(p);
+      tmp.scale.set(w, h, d);
+      tmp.rotation.set(0, rng()*PI*2, 0);
+      tmp.updateMatrix();
+      buildings.setMatrixAt(i, tmp.matrix);
+    }
+    buildings.instanceMatrix.needsUpdate = true;
+    group.add(buildings);
   }
-  const bldGeo = new THREE.BoxGeometry(1,1,1);
-  const bldMat = new THREE.MeshStandardMaterial({ map: texBrick, roughness: 0.95 });
-  const bldCount = QUALITY === 'desktop' ? 1600 : 600;
-  const buildings = new THREE.InstancedMesh(bldGeo, bldMat, bldCount);
-  for (let i = 0; i < bldCount; i++){
-    const s = pickWeightedStation();
-    const sw = STATION_WEIGHT[s.code] || 1;
-    // Tighter spread + closer max distance for villages so the cluster reads
-    // as a hamlet rather than a sprawl. Cities can spread up to ~1.3 km along
-    // the line and ~230 m laterally; villages stay within ~0.5 km × ~110 m.
-    const spreadKm = 0.4 + sw * 0.03;
-    const km = clamp(s.km + (rng()-0.5) * spreadKm * 2, 0.2, ROUTE.totalKm - 0.2);
-    const f = trackFrame(km);
-    const side = rng() < 0.5 ? -1 : 1;
-    const distMax = 60 + sw * 5;
-    const dist = 35 + rng() * distMax;
-    const p = f.p.clone().add(f.r.clone().multiplyScalar(side * dist));
-    const w = 4 + rng()*10, h = 4 + rng()*8, d = 4 + rng()*10;
-    p.y += h/2 - 0.5;
-    tmp.position.copy(p);
-    tmp.scale.set(w, h, d);
-    tmp.rotation.set(0, rng()*PI*2, 0);
-    tmp.updateMatrix();
-    buildings.setMatrixAt(i, tmp.matrix);
-  }
-  buildings.instanceMatrix.needsUpdate = true;
-  group.add(buildings);
 
   return group;
+}
+
+// ============================================================
+// ROADS + TRAFFIC — tarmac strip following ROUTE.roadPath (a list of
+// {km, lat} pairs like riverPath), plus a handful of cars animated
+// along it. Built once per buildWorld; updateTraffic(dt) advances
+// each car along the polyline every frame.
+// ============================================================
+let TRAFFIC = { cars: [], centerline: [], cumLen: [], total: 0 };
+function buildRoads(){
+  const group = new THREE.Group();
+  TRAFFIC = { cars: [], centerline: [], cumLen: [], total: 0 };
+  const path = (ROUTE.roadPath || []).filter(p => p && typeof p.km === 'number');
+  if (path.length < 2) return group;
+  for (const pt of path){
+    const km = clamp(pt.km, 0, ROUTE.totalKm);
+    const f = trackFrame(km);
+    const p = f.p.clone().add(f.r.clone().multiplyScalar(pt.lat || 0));
+    p.y += 0.05;
+    TRAFFIC.centerline.push(p);
+  }
+  TRAFFIC.cumLen.push(0);
+  for (let i = 1; i < TRAFFIC.centerline.length; i++){
+    TRAFFIC.cumLen.push(TRAFFIC.cumLen[i-1] + TRAFFIC.centerline[i].distanceTo(TRAFFIC.centerline[i-1]));
+  }
+  TRAFFIC.total = TRAFFIC.cumLen[TRAFFIC.cumLen.length - 1];
+  if (TRAFFIC.total < 5) return group;
+  const roadW = 7;
+  const positions = [], uvs = [], indices = [];
+  const N = TRAFFIC.centerline.length;
+  for (let i = 0; i < N; i++){
+    const p = TRAFFIC.centerline[i];
+    let dx, dz;
+    if (i === 0){ dx = TRAFFIC.centerline[1].x - p.x; dz = TRAFFIC.centerline[1].z - p.z; }
+    else if (i === N - 1){ dx = p.x - TRAFFIC.centerline[i-1].x; dz = p.z - TRAFFIC.centerline[i-1].z; }
+    else { dx = TRAFFIC.centerline[i+1].x - TRAFFIC.centerline[i-1].x; dz = TRAFFIC.centerline[i+1].z - TRAFFIC.centerline[i-1].z; }
+    const len = Math.hypot(dx, dz) || 1;
+    const perpX = -dz / len, perpZ = dx / len;
+    positions.push(p.x + perpX * roadW/2, p.y, p.z + perpZ * roadW/2);
+    positions.push(p.x - perpX * roadW/2, p.y, p.z - perpZ * roadW/2);
+    const v = TRAFFIC.cumLen[i] / 6;
+    uvs.push(0, v, 1, v);
+    if (i < N - 1){
+      const k = i * 2;
+      indices.push(k, k+1, k+2, k+1, k+3, k+2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  group.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.92 })));
+  const lineGeo = new THREE.BufferGeometry();
+  const linePos = [], lineUvs = [], lineIdx = [];
+  const lineHalfW = 0.10;
+  for (let i = 0; i < N; i++){
+    const p = TRAFFIC.centerline[i];
+    let dx, dz;
+    if (i === 0){ dx = TRAFFIC.centerline[1].x - p.x; dz = TRAFFIC.centerline[1].z - p.z; }
+    else if (i === N - 1){ dx = p.x - TRAFFIC.centerline[i-1].x; dz = p.z - TRAFFIC.centerline[i-1].z; }
+    else { dx = TRAFFIC.centerline[i+1].x - TRAFFIC.centerline[i-1].x; dz = TRAFFIC.centerline[i+1].z - TRAFFIC.centerline[i-1].z; }
+    const len = Math.hypot(dx, dz) || 1;
+    const perpX = -dz / len, perpZ = dx / len;
+    linePos.push(p.x + perpX * lineHalfW, p.y + 0.02, p.z + perpZ * lineHalfW);
+    linePos.push(p.x - perpX * lineHalfW, p.y + 0.02, p.z - perpZ * lineHalfW);
+    lineUvs.push(0, 0, 1, 0);
+    if (i < N - 1){ const k = i * 2; lineIdx.push(k, k+1, k+2, k+1, k+3, k+2); }
+  }
+  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePos, 3));
+  lineGeo.setAttribute('uv', new THREE.Float32BufferAttribute(lineUvs, 2));
+  lineGeo.setIndex(lineIdx);
+  lineGeo.computeVertexNormals();
+  group.add(new THREE.Mesh(lineGeo, new THREE.MeshStandardMaterial({ color: 0xf2c84a, roughness: 0.7 })));
+  const carCount = Math.max(2, Math.min(16, Math.floor(TRAFFIC.total / 120)));
+  const palette = [0xc83838, 0x3858c8, 0x38a838, 0xd0a838, 0x8a8a90, 0xe0e0e0, 0x603030];
+  for (let i = 0; i < carCount; i++){
+    const colour = palette[i % palette.length];
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 1.2, 4.4),
+      new THREE.MeshStandardMaterial({ color: colour, roughness: 0.45, metalness: 0.25 })
+    );
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(1.7, 0.8, 2.6),
+      new THREE.MeshStandardMaterial({ color: colour, roughness: 0.45, metalness: 0.25 })
+    );
+    roof.position.set(0, 0.9, -0.2);
+    body.add(roof);
+    group.add(body);
+    TRAFFIC.cars.push({
+      mesh: body,
+      s: (TRAFFIC.total * i) / carCount,
+      speed: 8 + (i * 1.7) % 6,
+    });
+  }
+  return group;
+}
+function updateTraffic(dt){
+  if (!TRAFFIC.cars.length || TRAFFIC.total < 5) return;
+  for (const car of TRAFFIC.cars){
+    car.s += car.speed * dt;
+    if (car.s >= TRAFFIC.total) car.s -= TRAFFIC.total;
+    const cum = TRAFFIC.cumLen;
+    let segIdx = 0;
+    for (let j = 1; j < cum.length; j++){
+      if (cum[j] > car.s){ segIdx = j - 1; break; }
+      segIdx = j - 1;
+    }
+    const a = TRAFFIC.centerline[segIdx];
+    const b = TRAFFIC.centerline[Math.min(segIdx + 1, TRAFFIC.centerline.length - 1)];
+    const t = (car.s - cum[segIdx]) / Math.max(0.001, (cum[segIdx + 1] || cum[segIdx]) - cum[segIdx]);
+    car.mesh.position.lerpVectors(a, b, t);
+    car.mesh.position.y += 0.6;
+    car.mesh.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+  }
 }
 
 // ============================================================
@@ -2529,6 +2645,7 @@ function buildWorld(){
   _addWorld(buildStations());
   _addWorld(buildSignals());
   _addWorld(buildScatter());
+  _addWorld(buildRoads());
   _addWorld(buildLandmarks());
 }
 
@@ -6679,6 +6796,7 @@ function loop(){
 
     placeCamera();
     placeTrainBody();
+    updateTraffic(dt);
     updateCabAnim(simDt);
     updateHUD(dt);
     audioTick({
