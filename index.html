@@ -2424,6 +2424,33 @@ function updateTraffic(dt){
 }
 
 // ============================================================
+// HILLS — click-placed terrain mounds from ROUTE.hills. Each entry
+// carries {km, lat, radius, height}; we render a grass-coloured
+// hemisphere at the projected world position.
+// ============================================================
+function buildHills(){
+  const group = new THREE.Group();
+  const hills = (ROUTE.hills || []).filter(h => h && typeof h.km === 'number');
+  if (!hills.length) return group;
+  const domeGeo = new THREE.SphereGeometry(1, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2);
+  const hillMat = new THREE.MeshStandardMaterial({
+    color: 0x546e36, roughness: 0.95, metalness: 0,
+  });
+  for (const h of hills){
+    const km = clamp(h.km, 0, ROUTE.totalKm);
+    const f = trackFrame(km);
+    const p = f.p.clone().add(f.r.clone().multiplyScalar(h.lat || 0));
+    const radius = clamp(h.radius || 120, 20, 500);
+    const height = clamp(h.height || 35, 5, 200);
+    const dome = new THREE.Mesh(domeGeo, hillMat);
+    dome.position.copy(p);
+    dome.scale.set(radius, height, radius);
+    group.add(dome);
+  }
+  return group;
+}
+
+// ============================================================
 // LANDMARKS — Salts Mill, viaducts, tunnels
 // ============================================================
 function buildLandmarks(){
@@ -2644,6 +2671,7 @@ function buildWorld(){
   _addWorld(buildOHLE());
   _addWorld(buildStations());
   _addWorld(buildSignals());
+  _addWorld(buildHills());
   _addWorld(buildScatter());
   _addWorld(buildRoads());
   _addWorld(buildLandmarks());
