@@ -2241,7 +2241,8 @@ function buildScatter(){
     const side = rng() < 0.5 ? -1 : 1;
     const dist = 18 + rng()*220;
     const p = f.p.clone().add(f.r.clone().multiplyScalar(side * dist));
-    p.y += 5.5 + (rng()-0.5)*1.5;
+    // Trees climb onto any hill the trunk would sit inside.
+    p.y += hillHeightAt(p.x, p.z) + 5.5 + (rng()-0.5)*1.5;
     tmp.position.copy(p);
     tmp.scale.setScalar(0.7 + rng()*1.2);
     tmp.rotation.set(0, rng()*PI*2, 0);
@@ -2270,7 +2271,8 @@ function buildScatter(){
       const r2 = ((i * 51 + 7)  % 100) / 100;
       const r3 = ((i * 89 + 23) % 100) / 100;
       const w = 4 + r1 * 6, ht = 4 + r2 * 5, d = 4 + r3 * 6;
-      p.y += ht / 2 - 0.5;
+      // Painted houses follow hill terrain — a village climbing a slope.
+      p.y += hillHeightAt(p.x, p.z) + ht / 2 - 0.5;
       tmp.position.copy(p);
       tmp.scale.set(w, ht, d);
       tmp.rotation.set(0, ((i * 37) % 100) / 100 * PI * 2, 0);
@@ -2294,7 +2296,8 @@ function buildScatter(){
       const dist = 45 + rng() * 110;
       const p = f.p.clone().add(f.r.clone().multiplyScalar(side * dist));
       const w = 4 + rng()*10, h = 4 + rng()*7, d = 4 + rng()*10;
-      p.y += h/2 - 0.5;
+      // Fallback scatter follows hill terrain too.
+      p.y += hillHeightAt(p.x, p.z) + h/2 - 0.5;
       tmp.position.copy(p);
       tmp.scale.set(w, h, d);
       tmp.rotation.set(0, rng()*PI*2, 0);
@@ -2426,9 +2429,26 @@ function updateTraffic(dt){
 // ============================================================
 // HILLS — click-placed terrain mounds from ROUTE.hills. Each entry
 // carries {km, lat, radius, height}; we render a grass-coloured
-// hemisphere at the projected world position.
+// hemisphere at the projected world position, plus cache each hill
+// for hillHeightAt() so trees / houses can sit on top of the dome
+// surface rather than clipping through it.
 // ============================================================
+let HILL_DATA = [];
+function hillHeightAt(x, z){
+  let maxH = 0;
+  for (let i = 0; i < HILL_DATA.length; i++){
+    const hl = HILL_DATA[i];
+    const dx = x - hl.cx, dz = z - hl.cz;
+    const d2 = dx * dx + dz * dz;
+    const r2 = hl.r2;
+    if (d2 >= r2) continue;
+    const local = hl.h * Math.sqrt(1 - d2 / r2);
+    if (local > maxH) maxH = local;
+  }
+  return maxH;
+}
 function buildHills(){
+  HILL_DATA = [];
   const group = new THREE.Group();
   const hills = (ROUTE.hills || []).filter(h => h && typeof h.km === 'number');
   if (!hills.length) return group;
@@ -2446,6 +2466,7 @@ function buildHills(){
     dome.position.copy(p);
     dome.scale.set(radius, height, radius);
     group.add(dome);
+    HILL_DATA.push({ cx: p.x, cz: p.z, r: radius, r2: radius * radius, h: height });
   }
   return group;
 }
