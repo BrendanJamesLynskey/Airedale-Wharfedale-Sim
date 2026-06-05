@@ -6389,16 +6389,18 @@ function updateSignals(km){
   for (const s of SIGNALS){
     if (s.km < km - 0.05) { setSignalAspect(s, 'G'); continue; }
     if (s.km > km + 4.0)  { setSignalAspect(s, 'G'); continue; }
-    // Find the next station whose protecting signal corresponds to this signal
     let aspect = 'G';
-    // Yellow if a sharp speed reduction is imminent
+    // Yellow if a sharp speed reduction is imminent — a legitimate
+    // signal aspect the driver should acknowledge via AWS.
     const drop = nextLimitDrop(s.km);
     if (drop && (drop.km - s.km) < 0.6) aspect = 'Y';
-    // Red if a station ahead has stopState 'enroute' and we haven't passed yet
-    const station = ROUTE.stations.find(st => st.km > s.km && st.km - s.km < 0.4);
-    if (station && GS.stopState === 'enroute' && GS.km < station.km - 0.02){
-      aspect = 'R';
-    }
+    // (The previous code dropped this signal to RED whenever a station
+    // sat 0..400 m ahead and the stopState was 'enroute' — i.e. every
+    // station approach. That fired the AWS proximity check on every
+    // arrival, which the user reported as too noisy. Station calls
+    // aren't signal blockages — the driver stops at the platform via
+    // the schedule, the signal stays green / yellow per the limit
+    // profile only.)
     setSignalAspect(s, aspect);
   }
 }
