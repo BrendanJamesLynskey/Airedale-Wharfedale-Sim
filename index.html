@@ -2328,13 +2328,30 @@ let TRAFFIC = { cars: [], centerline: [], cumLen: [], total: 0 };
 function buildRoads(){
   const group = new THREE.Group();
   TRAFFIC = { cars: [], centerline: [], cumLen: [], total: 0 };
-  const path = (ROUTE.roadPath || []).filter(p => p && typeof p.km === 'number');
+  // Sort by km so consecutive points form a coherent ribbon. The editor
+  // captures road points in CLICK order; on a circular route the click
+  // order can jump 20+ km between adjacent entries which turns the
+  // ribbon into a single triangle spanning the whole map.
+  const path = (ROUTE.roadPath || [])
+    .filter(p => p && typeof p.km === 'number')
+    .slice()
+    .sort((a, b) => a.km - b.km);
   if (path.length < 2) return group;
+  // Per-vertex Y lift that matches buildTerrain's lateral undulation, so
+  // the road lands flush on the grass instead of burying itself wherever
+  // the ground bumps up.
+  const ROAD_TERRAIN_HALF_W = 350;
+  function roadGradeOffset(km, lat){
+    const lf = min(1, abs(lat) / ROAD_TERRAIN_HALF_W);
+    const und = (sin(km*0.3 + lat*0.01)*3.5 + cos(km*0.7 + lat*0.005)*2.0) * lf;
+    return und - 0.6;
+  }
   for (const pt of path){
     const km = clamp(pt.km, 0, ROUTE.totalKm);
+    const lat = pt.lat || 0;
     const f = trackFrame(km);
-    const p = f.p.clone().add(f.r.clone().multiplyScalar(pt.lat || 0));
-    p.y += 0.05;
+    const p = f.p.clone().add(f.r.clone().multiplyScalar(lat));
+    p.y += roadGradeOffset(km, lat) + 0.05;
     TRAFFIC.centerline.push(p);
   }
   TRAFFIC.cumLen.push(0);
@@ -2343,53 +2360,54 @@ function buildRoads(){
   }
   TRAFFIC.total = TRAFFIC.cumLen[TRAFFIC.cumLen.length - 1];
   if (TRAFFIC.total < 5) return group;
-  const roadW = 7;
-  const positions = [], uvs = [], indices = [];
+  // Build a ribbon offset laterally from the centreline by latOffset
+  // (signed). Tarmac uses 0; edge lines use ±(roadW/2 − margin); centre
+  // line stays at 0 but is much narrower. All ribbons share this helper
+  // so they stay aligned on bends.
   const N = TRAFFIC.centerline.length;
-  for (let i = 0; i < N; i++){
-    const p = TRAFFIC.centerline[i];
-    let dx, dz;
-    if (i === 0){ dx = TRAFFIC.centerline[1].x - p.x; dz = TRAFFIC.centerline[1].z - p.z; }
-    else if (i === N - 1){ dx = p.x - TRAFFIC.centerline[i-1].x; dz = p.z - TRAFFIC.centerline[i-1].z; }
-    else { dx = TRAFFIC.centerline[i+1].x - TRAFFIC.centerline[i-1].x; dz = TRAFFIC.centerline[i+1].z - TRAFFIC.centerline[i-1].z; }
-    const len = Math.hypot(dx, dz) || 1;
-    const perpX = -dz / len, perpZ = dx / len;
-    positions.push(p.x + perpX * roadW/2, p.y, p.z + perpZ * roadW/2);
-    positions.push(p.x - perpX * roadW/2, p.y, p.z - perpZ * roadW/2);
-    const v = TRAFFIC.cumLen[i] / 6;
-    uvs.push(0, v, 1, v);
-    if (i < N - 1){
-      const k = i * 2;
-      indices.push(k, k+1, k+2, k+1, k+3, k+2);
+  function buildRibbon(latOffset, halfW, yLift){
+    const pos = [], uv = [], idx = [];
+    for (let i = 0; i < N; i++){
+      const p = TRAFFIC.centerline[i];
+      let dx, dz;
+      if (i === 0){ dx = TRAFFIC.centerline[1].x - p.x; dz = TRAFFIC.centerline[1].z - p.z; }
+      else if (i === N - 1){ dx = p.x - TRAFFIC.centerline[i-1].x; dz = p.z - TRAFFIC.centerline[i-1].z; }
+      else { dx = TRAFFIC.centerline[i+1].x - TRAFFIC.centerline[i-1].x; dz = TRAFFIC.centerline[i+1].z - TRAFFIC.centerline[i-1].z; }
+      const len = Math.hypot(dx, dz) || 1;
+      const perpX = -dz / len, perpZ = dx / len;
+      const cx = p.x + perpX * latOffset;
+      const cz = p.z + perpZ * latOffset;
+      const y  = p.y + yLift;
+      pos.push(cx + perpX * halfW, y, cz + perpZ * halfW);
+      pos.push(cx - perpX * halfW, y, cz - perpZ * halfW);
+      const v = TRAFFIC.cumLen[i] / 6;
+      uv.push(0, v, 1, v);
+      if (i < N - 1){
+        const k = i * 2;
+        idx.push(k, k+1, k+2, k+1, k+3, k+2);
+      }
     }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  group.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.92 })));
-  const lineGeo = new THREE.BufferGeometry();
-  const linePos = [], lineUvs = [], lineIdx = [];
-  const lineHalfW = 0.10;
-  for (let i = 0; i < N; i++){
-    const p = TRAFFIC.centerline[i];
-    let dx, dz;
-    if (i === 0){ dx = TRAFFIC.centerline[1].x - p.x; dz = TRAFFIC.centerline[1].z - p.z; }
-    else if (i === N - 1){ dx = p.x - TRAFFIC.centerline[i-1].x; dz = p.z - TRAFFIC.centerline[i-1].z; }
-    else { dx = TRAFFIC.centerline[i+1].x - TRAFFIC.centerline[i-1].x; dz = TRAFFIC.centerline[i+1].z - TRAFFIC.centerline[i-1].z; }
-    const len = Math.hypot(dx, dz) || 1;
-    const perpX = -dz / len, perpZ = dx / len;
-    linePos.push(p.x + perpX * lineHalfW, p.y + 0.02, p.z + perpZ * lineHalfW);
-    linePos.push(p.x - perpX * lineHalfW, p.y + 0.02, p.z - perpZ * lineHalfW);
-    lineUvs.push(0, 0, 1, 0);
-    if (i < N - 1){ const k = i * 2; lineIdx.push(k, k+1, k+2, k+1, k+3, k+2); }
-  }
-  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePos, 3));
-  lineGeo.setAttribute('uv', new THREE.Float32BufferAttribute(lineUvs, 2));
-  lineGeo.setIndex(lineIdx);
-  lineGeo.computeVertexNormals();
-  group.add(new THREE.Mesh(lineGeo, new THREE.MeshStandardMaterial({ color: 0xf2c84a, roughness: 0.7 })));
+  // Tarmac base. MeshBasic so the lighting can't shift the colour into
+  // the blues (the previous MeshStandard road read as "darker river" in
+  // shadow). 8 m wide so the markings have room to read.
+  const roadW = 8;
+  group.add(new THREE.Mesh(buildRibbon(0, roadW / 2, 0.05),
+    new THREE.MeshBasicMaterial({ color: 0x575757 })));
+  // White edge lines just inside the tarmac edges.
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0xf2f0ea });
+  const edgeOffset = roadW / 2 - 0.22;
+  group.add(new THREE.Mesh(buildRibbon(+edgeOffset, 0.09, 0.07), edgeMat));
+  group.add(new THREE.Mesh(buildRibbon(-edgeOffset, 0.09, 0.07), edgeMat));
+  // Bright yellow centre line.
+  group.add(new THREE.Mesh(buildRibbon(0, 0.18, 0.09),
+    new THREE.MeshBasicMaterial({ color: 0xf2c84a })));
   const carCount = Math.max(2, Math.min(16, Math.floor(TRAFFIC.total / 120)));
   const palette = [0xc83838, 0x3858c8, 0x38a838, 0xd0a838, 0x8a8a90, 0xe0e0e0, 0x603030];
   for (let i = 0; i < carCount; i++){
