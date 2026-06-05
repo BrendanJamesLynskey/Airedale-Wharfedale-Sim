@@ -2257,7 +2257,14 @@ function buildScatter(){
   // the prior STATION_WEIGHT random scatter; if a loaded map has no
   // houses array we still fall back to a uniform sprinkle so the
   // legacy Airedale / Wharfedale maps stay populated.
-  const paintedHouses = (ROUTE.houses || []).filter(h => h && typeof h.km === 'number');
+  // Skip houses that would render on top of the rails. The editor doesn't
+  // enforce a clearance when painting, so a stroke that grazes the line
+  // can drop houses with |lat| ≈ 0. 8 m is roughly outside the running-
+  // line ballast shoulder on both tracks of UK double-track.
+  const TRACK_HOUSE_CLEARANCE = 8;
+  const paintedHouses = (ROUTE.houses || []).filter(h =>
+    h && typeof h.km === 'number' && Math.abs(h.lat || 0) >= TRACK_HOUSE_CLEARANCE
+  );
   if (paintedHouses.length > 0){
     const hGeo = new THREE.BoxGeometry(1, 1, 1);
     const hMat = new THREE.MeshStandardMaterial({ map: texBrick, roughness: 0.95 });
