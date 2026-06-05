@@ -1813,6 +1813,68 @@ function buildStations(){
           pg.add(rail);
         }
       }
+      // ---- Wing-track → main-line turnouts. The wing rails above are a
+      // parallel stub alongside the platform; at each end we now build a
+      // ~50 m angled section that shifts laterally from wingRailCenter
+      // back to the nearest main-line centreline (0 for L wings, +TGO
+      // for R wings) so the wing reads as a real branch off the running
+      // line rather than an isolated stretch of track. Skipped if the
+      // transition would push past the route bounds (terminus wings). ----
+      const mainLat = sign < 0 ? 0 : TRACK_GAUGE_OFFSET;
+      const transitionM = 50;
+      const transitionKm = transitionM / KM;
+      for (const endSign of [-1, +1]){
+        const kmNear = s.km + endSign * halfKm;
+        const kmFar  = s.km + endSign * (halfKm + transitionKm);
+        if (kmFar < 0 || kmFar > ROUTE.totalKm) continue;
+        const tSegs = max(8, ceil(transitionM / 1.5));
+        const centerPts = [];
+        for (let i = 0; i <= tSegs; i++){
+          const u = i / tSegs;
+          const km = lerp(kmNear, kmFar, u);
+          const lat = lerp(wingRailCenter, mainLat, u);
+          const f = trackFrame(km);
+          centerPts.push(f.p.clone().add(f.r.clone().multiplyScalar(lat)));
+        }
+        for (let i = 0; i < tSegs; i++){
+          const a = centerPts[i], b = centerPts[i+1];
+          const mid = a.clone().add(b).multiplyScalar(0.5);
+          const dx = b.x - a.x, dz = b.z - a.z;
+          const yawSp = Math.atan2(-dx, -dz);
+          const sleeper = new THREE.Mesh(sleeperGeoW, sleeperMatW);
+          sleeper.position.copy(mid).add(new THREE.Vector3(0, -0.20, 0));
+          sleeper.rotation.y = yawSp;
+          pg.add(sleeper);
+        }
+        for (const rsgn of [-1, 1]){
+          for (let i = 0; i < tSegs; i++){
+            const a = centerPts[i], b = centerPts[i+1];
+            const dx = b.x - a.x, dz = b.z - a.z;
+            const len = Math.hypot(dx, dz);
+            if (len < 1e-4) continue;
+            const perpX = -dz / len, perpZ = dx / len;
+            const railA = new THREE.Vector3(
+              a.x + perpX * rsgn * railHalfGauge,
+              a.y,
+              a.z + perpZ * rsgn * railHalfGauge
+            );
+            const railB = new THREE.Vector3(
+              b.x + perpX * rsgn * railHalfGauge,
+              b.y,
+              b.z + perpZ * rsgn * railHalfGauge
+            );
+            const midRail = railA.clone().add(railB).multiplyScalar(0.5);
+            const rdx = railB.x - railA.x, rdz = railB.z - railA.z;
+            const railLen = Math.hypot(rdx, rdz);
+            const yawR = Math.atan2(-rdx, -rdz);
+            const railGeoT = new THREE.BoxGeometry(0.07, 0.13, railLen + 0.02);
+            const rail = new THREE.Mesh(railGeoT, railMatW);
+            rail.position.copy(midRail).add(new THREE.Vector3(0, -0.04, 0));
+            rail.rotation.y = yawR;
+            pg.add(rail);
+          }
+        }
+      }
       return pg;
     }
 
