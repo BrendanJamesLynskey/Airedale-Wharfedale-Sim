@@ -1988,37 +1988,41 @@ function buildStations(){
     if (!isHalt){
       const f0 = trackFrame(s.km);
       const yawMid = Math.atan2(-f0.t.x, -f0.t.z);
-      const boardSign = (s.side === 'R') ? +1 : -1;
-      const boardLat = boardSign * (platformW / 2 - 0.4);
-      const poleHeight = 3.5;
+      // Sit the board on the platform (0.6 m back from the track-facing
+      // edge), not in the cess between platform and running line.
+      const trackCentre = (s.side === 'R') ? TRACK_GAUGE_OFFSET : 0;
+      const boardSign   = (s.side === 'R') ? +1 : -1;
+      const innerLat    = trackCentre + boardSign * 1.8;
+      const boardLat    = innerLat + boardSign * 0.6;
+      const poleHeight = 2.5;
       const baseY = platformH;
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x303338, roughness: 0.8 });
       const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.08, 0.08, poleHeight, 8),
+        new THREE.CylinderGeometry(0.06, 0.06, poleHeight, 8),
         poleMat
       );
       pole.position.copy(f0.p)
         .add(f0.r.clone().multiplyScalar(boardLat))
         .add(new THREE.Vector3(0, baseY + poleHeight / 2, 0));
       group.add(pole);
-      const boardW = 4.0, boardH = 2.0;
+      const boardW = 2.5, boardH = 1.25;
       const boardMesh = new THREE.Mesh(
         new THREE.PlaneGeometry(boardW, boardH),
         new THREE.MeshBasicMaterial({ map: departureBoardTex, side: THREE.DoubleSide })
       );
       boardMesh.position.copy(f0.p)
         .add(f0.r.clone().multiplyScalar(boardLat))
-        .add(new THREE.Vector3(0, baseY + poleHeight + boardH / 2 - 0.3, 0));
+        .add(new THREE.Vector3(0, baseY + poleHeight + boardH / 2 - 0.15, 0));
       boardMesh.rotation.y = yawMid + (boardSign > 0 ? Math.PI : 0);
       group.add(boardMesh);
       const housingMat = new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.6 });
       const housing = new THREE.Mesh(
-        new THREE.BoxGeometry(boardW + 0.2, boardH + 0.2, 0.12),
+        new THREE.BoxGeometry(boardW + 0.15, boardH + 0.15, 0.08),
         housingMat
       );
       housing.position.copy(boardMesh.position);
-      housing.position.x -= Math.sin(boardMesh.rotation.y) * 0.07;
-      housing.position.z -= Math.cos(boardMesh.rotation.y) * 0.07;
+      housing.position.x -= Math.sin(boardMesh.rotation.y) * 0.045;
+      housing.position.z -= Math.cos(boardMesh.rotation.y) * 0.045;
       housing.rotation.y = boardMesh.rotation.y;
       group.add(housing);
     }
