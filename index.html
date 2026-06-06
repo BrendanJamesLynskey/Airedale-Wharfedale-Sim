@@ -1986,7 +1986,15 @@ function buildStations(){
     // step once the route info is drawn (see drawDepartureBoardTex
     // below, invoked once during buildStations).
     if (!isHalt){
-      const f0 = trackFrame(s.km);
+      // Offset the board 35 m along the track from the station centre so
+      // it sits past the centre canopy (max canopy length ~22 m, leaves
+      // ~24 m of clearance from any canopy edge). Falls back to the
+      // start-side end if the +km offset would clip past totalKm.
+      const BOARD_KM_OFFSET = 0.035;
+      const boardKm = (s.km + BOARD_KM_OFFSET <= ROUTE.totalKm - 0.005)
+        ? s.km + BOARD_KM_OFFSET
+        : Math.max(0.005, s.km - BOARD_KM_OFFSET);
+      const f0 = trackFrame(boardKm);
       const yawMid = Math.atan2(-f0.t.x, -f0.t.z);
       // Sit the board on the platform (0.6 m back from the track-facing
       // edge), not in the cess between platform and running line.
