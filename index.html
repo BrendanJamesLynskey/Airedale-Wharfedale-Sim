@@ -1443,37 +1443,60 @@ function buildStations(){
     // crossing a river on a viaduct. Set by style: 'bridge' on the
     // station entry.
     if (String(s.style || '').toLowerCase() === 'bridge'){
-      const bridgeGroup = new THREE.Group();
-      const f0 = trackFrame(s.km);
-      bridgeGroup.position.copy(f0.p);
-      bridgeGroup.rotation.y = Math.atan2(-f0.t.x, -f0.t.z);
-      const bridgeLen = platLen + 60;
-      const cx = TRACK_GAUGE_OFFSET / 2;
-      const deckW = TRACK_GAUGE_OFFSET + 11;
-      const stone   = new THREE.MeshStandardMaterial({ color: 0xc8b08a, roughness: 0.95 });
-      const stoneD  = new THREE.MeshStandardMaterial({ color: 0xa68a64, roughness: 0.95 });
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(deckW, 0.5, bridgeLen), stone);
-      deck.position.set(cx, -0.45, 0);
-      bridgeGroup.add(deck);
+      // Curved Blackfriars-style bridge — deck + parapets are ribbon
+      // meshes sampled along the running line so they follow the track
+      // exactly through any bend.
+      const cx        = TRACK_GAUGE_OFFSET / 2;
+      const deckW     = TRACK_GAUGE_OFFSET + 11;
+      const bridgeM   = platLen + 60;
+      const halfBridgeKm = (bridgeM / 2) / KM;
+      const segs      = max(8, ceil(bridgeM / 4));
+      const stone     = new THREE.MeshStandardMaterial({ color: 0xc8b08a, roughness: 0.95 });
+      const stoneD    = new THREE.MeshStandardMaterial({ color: 0xa68a64, roughness: 0.95 });
+      const paraMat   = new THREE.MeshStandardMaterial({ color: 0xa9947a, roughness: 0.85 });
+      const bridgeSamples = [];
+      for (let i = 0; i <= segs; i++){
+        const km = clamp(s.km - halfBridgeKm + (i / segs) * bridgeM / KM, 0, ROUTE.totalKm);
+        bridgeSamples.push(trackFrame(km));
+      }
+      function bridgeRibbon(latA, latB, yA, yB, mat){
+        const positions = [], indices = [];
+        for (let i = 0; i < bridgeSamples.length; i++){
+          const f = bridgeSamples[i];
+          const a = f.p.clone().add(f.r.clone().multiplyScalar(latA)).add(new THREE.Vector3(0, yA, 0));
+          const b = f.p.clone().add(f.r.clone().multiplyScalar(latB)).add(new THREE.Vector3(0, yB, 0));
+          positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+          if (i < bridgeSamples.length - 1){
+            const k = i * 2;
+            indices.push(k, k+1, k+2, k+1, k+3, k+2);
+          }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        g.setIndex(indices);
+        g.computeVertexNormals();
+        return new THREE.Mesh(g, mat);
+      }
+      group.add(bridgeRibbon(cx - deckW/2, cx + deckW/2, -0.7, -0.7, stone));
+      group.add(bridgeRibbon(cx - deckW/2, cx + deckW/2, -0.2, -0.2, stone));
+      const paraH = 1.6, paraT = 0.6;
+      const paraBotY = -0.2, paraTopY = paraBotY + paraH;
+      group.add(bridgeRibbon(cx - deckW/2,         cx - deckW/2 + paraT, paraBotY, paraTopY, paraMat));
+      group.add(bridgeRibbon(cx + deckW/2 - paraT, cx + deckW/2,         paraBotY, paraTopY, paraMat));
       const pierSpacing = 18;
-      const nPiers = max(2, Math.floor((bridgeLen - 6) / pierSpacing));
+      const nPiers = max(2, Math.floor((bridgeM - 6) / pierSpacing));
+      const pierGeo = new THREE.BoxGeometry(1.8, 7, 1.6);
       for (let i = 0; i < nPiers; i++){
-        const t = (i + 0.5) / nPiers;
-        const pz = -bridgeLen / 2 + 3 + t * (bridgeLen - 6);
-        for (const dx of [-deckW/2 + 1.2, cx, deckW/2 - 1.2]){
-          const pier = new THREE.Mesh(new THREE.BoxGeometry(1.8, 7, 1.6), stoneD);
-          pier.position.set(dx, -4, pz);
-          bridgeGroup.add(pier);
+        const sampleIdx = Math.round(((i + 0.5) / nPiers) * (bridgeSamples.length - 1));
+        const f = bridgeSamples[sampleIdx];
+        const yaw = Math.atan2(-f.t.x, -f.t.z);
+        for (const lat of [cx - deckW/2 + 1.2, cx, cx + deckW/2 - 1.2]){
+          const pier = new THREE.Mesh(pierGeo, stoneD);
+          pier.position.copy(f.p).add(f.r.clone().multiplyScalar(lat)).add(new THREE.Vector3(0, -4, 0));
+          pier.rotation.y = yaw;
+          group.add(pier);
         }
       }
-      const paraH = 1.6, paraT = 0.6;
-      const paraMat = new THREE.MeshStandardMaterial({ color: 0xa9947a, roughness: 0.85 });
-      for (const psign of [-1, +1]){
-        const para = new THREE.Mesh(new THREE.BoxGeometry(paraT, paraH, bridgeLen), paraMat);
-        para.position.set(cx + psign * (deckW / 2 - paraT / 2), -0.45 + 0.25 + paraH / 2, 0);
-        bridgeGroup.add(para);
-      }
-      group.add(bridgeGroup);
     }
     // Station type — recognised values: 'halt' | 'station' | 'terminus' |
     // 'junction'. V1 differences: halts skip the canopy/posts. Terminus and
@@ -1956,8 +1979,124 @@ function buildStations(){
     if (s.footbridge && !isHalt){
       group.add(buildFootbridge(s, halfKm));
     }
+    // Departure board — every non-halt station gets one. A black sign
+    // hanging from a pole at the platform centre, facing the running
+    // line, painted with the route's destination + the list of stops it
+    // calls at. The canvas texture is shared so every board updates in
+    // step once the route info is drawn (see drawDepartureBoardTex
+    // below, invoked once during buildStations).
+    if (!isHalt){
+      const f0 = trackFrame(s.km);
+      const yawMid = Math.atan2(-f0.t.x, -f0.t.z);
+      const boardSign = (s.side === 'R') ? +1 : -1;
+      const boardLat = boardSign * (platformW / 2 - 0.4);
+      const poleHeight = 3.5;
+      const baseY = platformH;
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x303338, roughness: 0.8 });
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, poleHeight, 8),
+        poleMat
+      );
+      pole.position.copy(f0.p)
+        .add(f0.r.clone().multiplyScalar(boardLat))
+        .add(new THREE.Vector3(0, baseY + poleHeight / 2, 0));
+      group.add(pole);
+      const boardW = 4.0, boardH = 2.0;
+      const boardMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(boardW, boardH),
+        new THREE.MeshBasicMaterial({ map: departureBoardTex, side: THREE.DoubleSide })
+      );
+      boardMesh.position.copy(f0.p)
+        .add(f0.r.clone().multiplyScalar(boardLat))
+        .add(new THREE.Vector3(0, baseY + poleHeight + boardH / 2 - 0.3, 0));
+      boardMesh.rotation.y = yawMid + (boardSign > 0 ? Math.PI : 0);
+      group.add(boardMesh);
+      const housingMat = new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.6 });
+      const housing = new THREE.Mesh(
+        new THREE.BoxGeometry(boardW + 0.2, boardH + 0.2, 0.12),
+        housingMat
+      );
+      housing.position.copy(boardMesh.position);
+      housing.position.x -= Math.sin(boardMesh.rotation.y) * 0.07;
+      housing.position.z -= Math.cos(boardMesh.rotation.y) * 0.07;
+      housing.rotation.y = boardMesh.rotation.y;
+      group.add(housing);
+    }
   }
+  // Draw the departure-board canvas now that we know which route is
+  // active — every station's board shares this texture.
+  drawDepartureBoardTex();
   return group;
+}
+
+// ============================================================
+// DEPARTURE BOARD — shared canvas texture used by the per-station
+// signs in buildStations. Drawn once per route load with the active
+// route's destination and the list of intermediate stops.
+// ============================================================
+const departureBoardCanvas = document.createElement('canvas');
+departureBoardCanvas.width = 1024;
+departureBoardCanvas.height = 512;
+const departureBoardCtx = departureBoardCanvas.getContext('2d');
+const departureBoardTex = new THREE.CanvasTexture(departureBoardCanvas);
+departureBoardTex.colorSpace = THREE.SRGBColorSpace;
+function drawDepartureBoardTex(){
+  const W = 1024, H = 512;
+  const ctx = departureBoardCtx;
+  ctx.fillStyle = '#06090f';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#142036';
+  ctx.fillRect(0, 0, W, 64);
+  ctx.fillStyle = '#ffaa30';
+  ctx.font = 'bold 38px Orbitron, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillText('DEPARTURES', 24, 32);
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 28px Roboto Mono, monospace';
+  ctx.fillText(ROUTE.service || '', W - 24, 32);
+  const stations = ROUTE.stations || [];
+  if (!stations.length){
+    departureBoardTex.needsUpdate = true;
+    return;
+  }
+  const dest = stations[stations.length - 1];
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffd060';
+  ctx.font = 'bold 28px Roboto Mono, monospace';
+  ctx.fillText('TO', 24, 110);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 62px Orbitron, sans-serif';
+  ctx.fillText(dest.name.toUpperCase(), 90, 110);
+  ctx.fillStyle = '#ffaa30';
+  ctx.font = 'bold 30px Roboto Mono, monospace';
+  ctx.fillText('CALLING AT', 24, 190);
+  const middle = stations.slice(1, -1);
+  ctx.font = '26px Roboto Mono, monospace';
+  ctx.fillStyle = '#cfe6f7';
+  const colWidth = W / 2 - 30;
+  let col = 0, y = 232;
+  for (let i = 0; i < middle.length; i++){
+    const stn = middle[i];
+    const text = '• ' + stn.name.toUpperCase();
+    const x = 50 + col * colWidth;
+    ctx.fillText(text, x, y);
+    y += 34;
+    if (y > H - 80){
+      col++;
+      y = 232;
+      if (col > 1) break;
+    }
+  }
+  ctx.fillStyle = '#142036';
+  ctx.fillRect(0, H - 50, W, 50);
+  ctx.fillStyle = '#ffaa30';
+  ctx.font = '24px Roboto Mono';
+  ctx.textAlign = 'center';
+  const arrSec = (ROUTE.schedule && ROUTE.schedule[ROUTE.schedule.length - 1]) || 0;
+  const mm = Math.floor(arrSec / 60), ss = arrSec % 60;
+  ctx.fillText('ARRIVES IN  ' + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0'), W / 2, H - 25);
+  departureBoardTex.needsUpdate = true;
 }
 
 // Terminus buffer stop — concrete base + two red/white striped uprights,
